@@ -714,6 +714,7 @@ object DependencyOverrides {
     dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
     dependencyOverrides += "xerces" % "xercesImpl" % "2.12.0",
     dependencyOverrides += "jline" % "jline" % "2.14.6",
+    dependencyOverrides += "io.netty" % "nettty-all" % "4.1.17.Final") // 4.1.90?
     dependencyOverrides += "org.apache.avro" % "avro" % "1.11.0")
 }
 

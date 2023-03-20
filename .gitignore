@@ -38,8 +38,11 @@ R/pkg/tests/fulltests/Rplots.pdf
 build/*.jar
 build/apache-maven*
 build/scala*
+build/zinc*
+bigdl.log
 cache
 checkpoint
+completed.txt
 conf/*.cmd
 conf/*.conf
 conf/*.properties
@@ -94,6 +97,7 @@ unit-tests.log
 work/
 docs/.jekyll-metadata
 docs/.jekyll-cache
+*.crc
 
 # For Hive
 TempStatsStore/

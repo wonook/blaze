@@ -25,6 +25,9 @@ libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "8.43"
 // checkstyle uses guava 23.0.
 libraryDependencies += "com.google.guava" % "guava" % "23.0"
 
+libraryDependencies += "io.netty" % "netty-all" % "4.1.17.Final"
+libraryDependencies += "io.netty" % "netty" % "3.9.9.Final"
+
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.15.0")
 
 addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "5.2.4")
@@ -40,6 +43,9 @@ addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 libraryDependencies += "org.ow2.asm"  % "asm" % "9.1"
 
 libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.1"
+
+dependencyOverrides += "io.netty" % "netty-all" % "4.1.17.Final" // 4.1.90?
+dependencyOverrides += "io.netty" % "netty" % "3.9.9.Final"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
