@@ -1,0 +1,24 @@
+#!/bin/bash
+
+APPNAME=BP
+APPCLASS=org.graphframes.examples.BeliefPropagation
+APPJAR=/home/jyeo/graphframes/target/scala-2.11/graphframes-assembly-0.6.0-spark2.3.jar
+ARGS="3200"
+
+PACKAGES=com.microsoft.ml.spark:mmlspark_2.11:1.0.0-rc1
+EXECUTORS=3
+EXECUTOR_MEM_SIZE=16g
+DISAGG_MEM_SIZE=24g
+FRACTION=0.1
+
+MEMORY_MANAGER=Disagg
+STORING_POLICY=Default
+CACHING_POLICY=None
+AUTOCACHING=false
+EVICT_POLICY=DRDD
+DAG_PATH=/home/jyeo/spark/bp_log.txt
+
+./ours.sh $APPNAME $APPCLASS $APPJAR $ARGS \
+$PACKAGES $EXECUTORS $EXECUTOR_MEM_SIZE $DISAGG_MEM_SIZE $FRACTION \
+$MEMORY_MANAGER $STORING_POLICY $CACHING_POLICY $AUTOCACHING $EVICT_POLICY $DAG_PATH
+

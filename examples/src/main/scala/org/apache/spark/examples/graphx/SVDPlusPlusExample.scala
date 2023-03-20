@@ -15,22 +15,13 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
 package org.apache.spark.examples.graphx
 
-// $example on$
-import org.apache.spark.graphx.GraphLoader
-// $example off$
+import org.apache.spark.graphx.Edge
+import org.apache.spark.graphx.lib.SVDPlusPlus
 import org.apache.spark.sql.SparkSession
 
-/**
- * A PageRank example on social network dataset
- * Run with
- * {{{
- * bin/run-example graphx.PageRankExample
- * }}}
- */
-object PageRankExample {
+object SVDPlusPlusExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession.
     val spark = SparkSession
@@ -39,28 +30,25 @@ object PageRankExample {
       .getOrCreate()
     val sc = spark.sparkContext
 
-    var input = "data/graphx/followers.txt"
-    if (args.length > 0) {
-      input = args(0)
-    }
-
     // $example on$
-    // Load the edges as a graph
-    val graph = GraphLoader.edgeListFile(sc, input)
-    // Run PageRank
-    val ranks = graph.pageRank(0.0001).vertices
-//    // Join the ranks with the usernames
-//    val users = sc.textFile("data/graphx/users.txt").map { line =>
-//      val fields = line.split(",")
-//      (fields(0).toLong, fields(1))
-//    }
-//    val ranksByUsername = users.join(ranks).map {
-//      case (id, (username, rank)) => (username, rank)
-//    }
-//    // Print the result
-//    println(ranksByUsername.collect().mkString("\n"))
-    // $example off$
+    // Load the graph as in the PageRank example
+    val svdppErr = 8.0
+    val path = args(0)
+    val edges = sc.textFile(path).map { line =>
+      val fields = line.split("::")
+      Edge(fields(0).toLong * 2, fields(1).toLong * 2 + 1, fields(2).toDouble)
+    }
+    val conf = new SVDPlusPlus.Conf(10, 5, 0.0, 5.0, 0.007, 0.007, 0.005, 0.015) // 5 iterations
+    val (graph, _) = SVDPlusPlus.run(edges, conf)
+    graph.cache()
+
+    val err = graph.vertices.map { case (vid, vd) =>
+      if (vid % 2 == 1) vd._4 else 0.0
+    }.reduce(_ + _) / graph.numEdges
+    // Print the result
+    println(s"error $err, goal was $svdppErr")
+
     spark.stop()
   }
 }
-// scalastyle:on println
+

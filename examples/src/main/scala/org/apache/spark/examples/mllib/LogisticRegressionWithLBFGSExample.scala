@@ -42,9 +42,10 @@ object LogisticRegressionWithLBFGSExample {
     val test = splits(1)
 
     // Run training algorithm to build the model
-    val model = new LogisticRegressionWithLBFGS()
+    val lrModel = new LogisticRegressionWithLBFGS()
       .setNumClasses(10)
-      .run(training)
+    lrModel.optimizer.setNumIterations(100)
+    val model = lrModel.run(training)
 
     // Compute raw scores on the test set.
     val predictionAndLabels = test.map { case LabeledPoint(label, features) =>

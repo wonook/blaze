@@ -38,11 +38,13 @@ object TfIdfExample {
       (1.0, "Logistic regression models are neat")
     )).toDF("label", "sentence")
 
+    // sentence col -> words col
     val tokenizer = new Tokenizer().setInputCol("sentence").setOutputCol("words")
     val wordsData = tokenizer.transform(sentenceData)
 
+    // words col -> rawFeatures col
     val hashingTF = new HashingTF()
-      .setInputCol("words").setOutputCol("rawFeatures").setNumFeatures(20)
+      .setInputCol("words").setOutputCol("rawFeatures").setNumFeatures(2^18)
 
     val featurizedData = hashingTF.transform(wordsData)
     // alternatively, CountVectorizer can also be used to get term frequency vectors

@@ -31,8 +31,14 @@ object RankingMetricsExample {
       .appName("RankingMetricsExample")
       .getOrCreate()
     // $example on$
+
+    var input = "data/mllib/sample_movielens_data.txt"
+    if (args.length > 0) {
+      input = args(0)
+    }
+
     // Read in the ratings data
-    val ratings = spark.read.textFile("data/mllib/sample_movielens_data.txt").rdd.map { line =>
+    val ratings = spark.read.textFile(input).rdd.map { line =>
       val fields = line.split("::")
       Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
     }.cache()
