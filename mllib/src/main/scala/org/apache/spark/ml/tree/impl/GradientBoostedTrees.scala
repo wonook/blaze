@@ -340,6 +340,7 @@ private[spark] object GradientBoostedTrees extends Logging {
 
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
+//    MEMORY_ONLY?
     val treePoints = TreePoint.convertToTreeRDD(
       retaggedInput, splits, metadata)
       .persist(StorageLevel.MEMORY_AND_DISK)

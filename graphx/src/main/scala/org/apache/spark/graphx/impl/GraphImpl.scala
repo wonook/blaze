@@ -205,6 +205,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
     // Map and combine.
     val preAgg = view.edges.partitionsRDD.mapPartitions(_.flatMap {
+      // for each partition
       case (pid, edgePartition) =>
         // Choose scan method
         val activeFraction = edgePartition.numActives.getOrElse(0) / edgePartition.indexSize.toFloat

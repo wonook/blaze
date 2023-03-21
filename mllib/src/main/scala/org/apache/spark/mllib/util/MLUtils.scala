@@ -177,6 +177,17 @@ object MLUtils extends Logging {
    */
   @Since("1.0.0")
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String): Unit = {
+    data.mapPartitions(l => {
+      l.map { case LabeledPoint(label, features) =>
+        val sb = new StringBuilder(label.toString)
+        features.foreachActive { case (i, v) =>
+          sb += ' '
+          sb ++= s"${i + 1}:$v"
+        }
+        sb.mkString
+      }
+    }).saveAsTextFile(dir)
+
     // TODO: allow to specify label precision and feature precision.
     val dataStr = data.map { case LabeledPoint(label, features) =>
       val sb = new StringBuilder(label.toString)

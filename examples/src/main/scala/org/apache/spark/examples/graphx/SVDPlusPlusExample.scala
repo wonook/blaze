@@ -46,7 +46,9 @@ object SVDPlusPlusExample {
       if (vid % 2 == 1) vd._4 else 0.0
     }.reduce(_ + _) / graph.numEdges
     // Print the result
+    // scalastyle:off println
     println(s"error $err, goal was $svdppErr")
+    // scalastyle:on println line=49 column=4
 
     spark.stop()
   }
