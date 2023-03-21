@@ -206,7 +206,7 @@ final class ShuffleBlockFetcherIterator(
     // is handled at another layer in the code.  When encryption is enabled, shuffle data is written
     // to disk encrypted in the first place, and sent over the network still encrypted.
     new SimpleDownloadFile(
-      blockManager.diskBlockManager.createTempLocalBlock()._2, transportConf)
+      blockManager.diskBlockManager.createTempShuffleBlock()._2, transportConf)
   }
 
   override def registerTempFileToClean(file: DownloadFile): Boolean = synchronized {
@@ -722,7 +722,12 @@ final class ShuffleBlockFetcherIterator(
     }
   }
 
-  override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch
+  private var fetchTime = 0L
+
+  override def hasNext: Boolean = {
+    val result = numBlocksProcessed < numBlocksToFetch
+    result
+  }
 
   /**
    * Fetches the next (BlockId, InputStream). If a task fails, the ManagedBuffers
@@ -753,6 +758,7 @@ final class ShuffleBlockFetcherIterator(
       result = results.take()
       val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
       shuffleMetrics.incFetchWaitTime(fetchWaitTime)
+      fetchTime += fetchWaitTime
 
       result match {
         case r @ SuccessFetchResult(blockId, mapIndex, address, size, buf, isNetworkReqDone) =>
@@ -777,6 +783,8 @@ final class ShuffleBlockFetcherIterator(
             resetNettyOOMFlagIfPossible(maxReqSizeShuffleToMem)
             logDebug("Number of requests in flight " + reqsInFlight)
           }
+
+          val fs = System.currentTimeMillis()
 
           val in = if (buf.size == 0) {
             // We will never legitimately receive a zero-size block. All blocks with zero records
@@ -896,6 +904,9 @@ final class ShuffleBlockFetcherIterator(
                   result = null
                 }
             } finally {
+              val fe = System.currentTimeMillis()
+              fetchTime += (fe - fs)
+
               if (blockId.isShuffleChunk) {
                 pushBasedFetchHelper.removeChunk(blockId.asInstanceOf[ShuffleBlockChunkId])
               }

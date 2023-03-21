@@ -194,12 +194,19 @@ class ShuffledRowRDD(
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+    @transient lazy val log = org.apache.log4j.LogManager.getLogger("myLogger")
+    val start = System.currentTimeMillis()
+    var startIdx = 0
+    var endIdx = 0
+
     val tempMetrics = context.taskMetrics().createTempShuffleReadMetrics()
     // `SQLShuffleReadMetricsReporter` will update its own metrics for SQL exchange operator,
     // as well as the `tempMetrics` for basic shuffle metrics.
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
     val reader = split.asInstanceOf[ShuffledRowRDDPartition].spec match {
       case CoalescedPartitionSpec(startReducerIndex, endReducerIndex, _) =>
+        startIdx = startReducerIndex
+        endIdx = endReducerIndex
         SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           startReducerIndex,
@@ -208,6 +215,8 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case PartialReducerPartitionSpec(reducerIndex, startMapIndex, endMapIndex, _) =>
+        startIdx = reducerIndex
+        endIdx = reducerIndex + 1
         SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           startMapIndex,
@@ -218,6 +227,8 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case PartialMapperPartitionSpec(mapIndex, startReducerIndex, endReducerIndex) =>
+        startIdx = startReducerIndex
+        endIdx = endReducerIndex
         SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           mapIndex,
@@ -228,6 +239,8 @@ class ShuffledRowRDD(
           sqlMetricsReporter)
 
       case CoalescedMapperPartitionSpec(startMapIndex, endMapIndex, numReducers) =>
+        startIdx = 0
+        endIdx = numReducers
         SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           startMapIndex,
@@ -237,7 +250,13 @@ class ShuffledRowRDD(
           context,
           sqlMetricsReporter)
     }
-    reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
+    val ret = reader.read().asInstanceOf[Iterator[Product2[Int, InternalRow]]].map(_._2)
+
+    val elapsed = System.currentTimeMillis() - start
+    log.info("ShuffledRowRDD stage " + context.stageId() + " task " + context.taskAttemptId() + " ("
+      + startIdx + "-" + endIdx + ") elapsed " + elapsed)
+
+    ret
   }
 
   override def clearDependencies(): Unit = {

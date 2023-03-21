@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.language.existentials
-
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -28,6 +27,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, Par
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.storage.blaze.BlazeParameters
 
 class DataSourceRDDPartition(val index: Int, val inputPartitions: Seq[InputPartition])
   extends Partition with Serializable
@@ -42,10 +42,20 @@ class DataSourceRDD(
     customMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) {
 
+  private val isProfileRun = SparkEnv.get.conf.get(BlazeParameters.IS_PROFILE_RUN)
+
   override protected def getPartitions: Array[Partition] = {
-    inputPartitions.zipWithIndex.map {
-      case (inputPartitions, index) => new DataSourceRDDPartition(index, inputPartitions)
-    }.toArray
+    if (isProfileRun) {
+      inputPartitions.zipWithIndex.map {
+        case (inputPartition, index) => new DataSourceRDDPartition(index, inputPartition)
+      }.filter {
+        p => p.index < 3
+      }.toArray
+    } else {
+      inputPartitions.zipWithIndex.map {
+        case (inputPartition, index) => new DataSourceRDDPartition(index, inputPartition)
+      }.toArray
+    }
   }
 
   private def castPartition(split: Partition): DataSourceRDDPartition = split match {

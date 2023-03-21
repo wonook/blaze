@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.Closeable
 import java.net.URI
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit, LineRecordReader}
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
+import org.apache.spark.storage.blaze.BlazeParameters
 
 /**
  * An adaptor from a [[PartitionedFile]] to an [[Iterator]] of [[Text]], which are all of the lines
@@ -42,15 +44,21 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 class HadoopFileLinesReader(
     file: PartitionedFile,
     lineSeparator: Option[Array[Byte]],
-    conf: Configuration) extends Iterator[Text] with Closeable {
+    conf: Configuration) extends Iterator[Text] with Closeable with Logging {
 
   def this(file: PartitionedFile, conf: Configuration) = this(file, None, conf)
+
+  private val isProfileRun = SparkEnv.get.conf.get(BlazeParameters.IS_PROFILE_RUN)
 
   private val _iterator = {
     val fileSplit = new FileSplit(
       new Path(new URI(file.filePath)),
       file.start,
-      file.length,
+      if (isProfileRun) {
+        1024
+      } else {
+        file.length
+      },
       // The locality is decided by `getPreferredLocations` in `FileScanRDD`.
       Array.empty)
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
@@ -66,9 +74,29 @@ class HadoopFileLinesReader(
     new RecordReaderIterator(reader)
   }
 
-  override def hasNext: Boolean = _iterator.hasNext
+  private val CNT = 10
+  private var read = 0
 
-  override def next(): Text = _iterator.next()
+  override def hasNext: Boolean = {
+    if (isProfileRun) {
+      if (read >= CNT) {
+        false
+      } else {
+        _iterator.hasNext
+      }
+    } else {
+      _iterator.hasNext
+    }
+  }
+
+  override def next(): Text = {
+    if (isProfileRun) {
+      read += 1
+      _iterator.next()
+    } else {
+      _iterator.next()
+    }
+  }
 
   override def close(): Unit = _iterator.close()
 }

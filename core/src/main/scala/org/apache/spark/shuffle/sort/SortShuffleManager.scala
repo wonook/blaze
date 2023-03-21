@@ -18,9 +18,7 @@
 package org.apache.spark.shuffle.sort
 
 import java.util.concurrent.ConcurrentHashMap
-
 import scala.collection.JavaConverters._
-
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._

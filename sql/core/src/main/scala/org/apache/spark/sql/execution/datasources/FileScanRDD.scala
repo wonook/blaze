@@ -18,12 +18,9 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.{Closeable, FileNotFoundException, IOException}
-
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.fs.Path
-
-import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
+import org.apache.spark.{SparkEnv, SparkUpgradeException, TaskContext, Partition => RDDPartition}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
@@ -34,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.vectorized.ConstantColumnVector
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.storage.blaze.BlazeParameters
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
@@ -304,7 +302,19 @@ class FileScanRDD(
     iterator.asInstanceOf[Iterator[InternalRow]] // This is an erasure hack.
   }
 
-  override protected def getPartitions: Array[RDDPartition] = filePartitions.toArray
+  private val isProfileRun = SparkEnv.get.conf.get(BlazeParameters.IS_PROFILE_RUN)
+
+  override protected def getPartitions: Array[RDDPartition] = {
+    if (isProfileRun) {
+      filePartitions.zipWithIndex.map {
+        case (filePartition, index) => (filePartition, index)
+      }.filter { p => p._2 < 3 }
+        .map { p => p._1 }
+        .toArray
+    } else {
+      filePartitions.toArray
+    }
+  }
 
   override protected def getPreferredLocations(split: RDDPartition): Seq[String] = {
     split.asInstanceOf[FilePartition].preferredLocations()
