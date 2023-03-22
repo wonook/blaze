@@ -17,9 +17,10 @@
 
 package org.apache.spark.rdd
 
-import scala.reflect.ClassTag
+import org.apache.spark.storage.RDDBlockId
 
-import org.apache.spark.{Partition, TaskContext}
+import scala.reflect.ClassTag
+import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.util.Utils
 
 private[spark]
@@ -63,8 +64,22 @@ class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev)
     firstParent[T].preferredLocations(split.asInstanceOf[ZippedWithIndexRDDPartition].prev)
 
   override def compute(splitIn: Partition, context: TaskContext): Iterator[(T, Long)] = {
+    val parentCompStart = System.currentTimeMillis()
+
     val split = splitIn.asInstanceOf[ZippedWithIndexRDDPartition]
     val parentIter = firstParent[T].iterator(split.prev, context)
-    Utils.getIteratorZipWithIndex(parentIter, split.startIndex)
+    val parentCompTime = System.currentTimeMillis() - parentCompStart
+
+    val st = System.currentTimeMillis()
+    val result = Utils.getIteratorZipWithIndex(parentIter, split.startIndex)
+    val compTime = System.currentTimeMillis() - st
+
+    val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
+    val thisBlockId = RDDBlockId(id, split.index)
+    val key = s"${parentBlockId.name}-${thisBlockId.name}"
+    val totalCompTime = parentCompTime + compTime
+    SparkEnv.get.blockManager.blazeManager.sendCompTime(thisBlockId, key, totalCompTime)
+
+    result
   }
 }

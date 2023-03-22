@@ -45,6 +45,7 @@ private[spark] class ShuffleMapStage(
     mapOutputTrackerMaster: MapOutputTrackerMaster,
     resourceProfileId: Int)
   extends Stage(id, rdd, numTasks, parents, firstJobId, callSite, resourceProfileId) {
+  logInfo(s"ShuffleMapStage $id rdd that this stage runs on ${rdd.id} callSite $callSite")
 
   private[this] var _mapStageJobs: List[ActiveJob] = Nil
 

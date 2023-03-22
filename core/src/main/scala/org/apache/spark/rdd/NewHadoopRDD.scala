@@ -20,10 +20,8 @@ package org.apache.spark.rdd
 import java.io.{FileNotFoundException, IOException}
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
-
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.io.compress.CompressionCodecFactory
@@ -31,7 +29,6 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileInputFormat, FileSplit, InvalidInputException}
 import org.apache.hadoop.mapreduce.task.{JobContextImpl, TaskAttemptContextImpl}
-
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -40,6 +37,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.blaze.BlazeParameters
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager, Utils}
 
 private[spark] class NewHadoopPartition(
@@ -121,6 +119,8 @@ class NewHadoopRDD[K, V](
     }
   }
 
+  private val isProfileRun = SparkEnv.get.conf.get(BlazeParameters.IS_PROFILE_RUN)
+
   override def getPartitions: Array[Partition] = {
     val inputFormat = inputFormatClass.getConstructor().newInstance()
     // setMinPartitions below will call FileInputFormat.listStatus(), which can be quite slow when
@@ -155,12 +155,21 @@ class NewHadoopRDD[K, V](
         }
       }
 
-      val result = new Array[Partition](rawSplits.size)
-      for (i <- 0 until rawSplits.size) {
-        result(i) =
+      if (isProfileRun) {
+        val result = new Array[Partition](10)
+        for (i <- 0 until 10) {
+          result(i) =
             new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+        }
+        result
+      } else {
+        val result = new Array[Partition](rawSplits.size)
+        for (i <- 0 until rawSplits.size) {
+          result(i) =
+            new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+        }
+        result
       }
-      result
     } catch {
       case e: InvalidInputException if ignoreMissingFiles =>
         logWarning(s"${_conf.get(FileInputFormat.INPUT_DIR)} doesn't exist and no" +
@@ -245,10 +254,24 @@ class NewHadoopRDD[K, V](
 
       private var havePair = false
 
+      logInfo(s"Sampled run  in NewHadoopRDD $isProfileRun")
+
+      var cnt = 0
+
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
           try {
-            finished = !reader.nextKeyValue
+            if (isProfileRun) {
+              if (cnt >= 100) {
+                logInfo(s"Sampled run reading finished!!")
+                finished = true
+              } else {
+                finished = !reader.nextKeyValue
+                cnt += 1
+              }
+            } else {
+              finished = !reader.nextKeyValue
+            }
           } catch {
             case e: FileNotFoundException if ignoreMissingFiles =>
               logWarning(s"Skipped missing file: ${split.serializableHadoopSplit}", e)

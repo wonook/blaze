@@ -38,6 +38,8 @@ private[spark] class ResultStage(
     resourceProfileId: Int)
   extends Stage(id, rdd, partitions.length, parents, firstJobId, callSite, resourceProfileId) {
 
+  logInfo(s"ResultStage $id rdd that this stage runs on ${rdd.id} callSite $callSite")
+
   /**
    * The active job for this result stage. Will be empty if the job has already finished
    * (e.g., because the job was cancelled).

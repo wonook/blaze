@@ -18,13 +18,12 @@
 package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
-
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 
@@ -137,16 +136,30 @@ class CoGroupedRDD[K: ClassTag](
       case oneToOneDependency: OneToOneDependency[Product2[K, Any]] @unchecked =>
         val dependencyPartition = split.narrowDeps(depNum).get.split
         // Read them from the parent
+        val st = System.currentTimeMillis()
         val it = oneToOneDependency.rdd.iterator(dependencyPartition, context)
+        val compTime = System.currentTimeMillis() - st
+        val parentRDDId = oneToOneDependency.rdd.id
+        val thisBlockId = RDDBlockId(id, dependencyPartition.index)
+        val keyForParent = s"${oneToOneDependency.rdd.name}-${thisBlockId.name}"
+        SparkEnv.get.blockManager.blazeManager.sendCompTime(thisBlockId, keyForParent, compTime)
+
         rddIterators += ((it, depNum))
 
       case shuffleDependency: ShuffleDependency[_, _, _] =>
         // Read map outputs of shuffle
+        val st = System.currentTimeMillis()
         val metrics = context.taskMetrics().createTempShuffleReadMetrics()
         val it = SparkEnv.get.shuffleManager
           .getReader(
             shuffleDependency.shuffleHandle, split.index, split.index + 1, context, metrics)
           .read()
+        val compTime = System.currentTimeMillis() - st
+        val parentRDDId = shuffleDependency.rdd.id
+        val thisBlockId = RDDBlockId(id, split.index)
+        val keyForParent = s"${shuffleDependency.rdd.name}-${thisBlockId.name}"
+        SparkEnv.get.blockManager.blazeManager.sendCompTime(thisBlockId, keyForParent, compTime)
+
         rddIterators += ((it, depNum))
     }
 

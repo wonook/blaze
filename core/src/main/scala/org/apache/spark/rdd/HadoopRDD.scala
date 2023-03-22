@@ -20,10 +20,8 @@ package org.apache.spark.rdd
 import java.io.{FileNotFoundException, IOException}
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
-
 import scala.collection.immutable.Map
 import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapred._
@@ -31,7 +29,6 @@ import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.util.ReflectionUtils
-
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
@@ -42,6 +39,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.blaze.BlazeParameters
 import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
 
 /**
@@ -200,6 +198,8 @@ class HadoopRDD[K, V](
     newInputFormat
   }
 
+  private val isProfileRun = SparkEnv.get.conf.get(BlazeParameters.IS_PROFILE_RUN)
+
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
@@ -225,11 +225,20 @@ class HadoopRDD[K, V](
           }
         }
       }
-      val array = new Array[Partition](inputSplits.size)
-      for (i <- 0 until inputSplits.size) {
-        array(i) = new HadoopPartition(id, i, inputSplits(i))
+
+      if (isProfileRun) {
+        val array = new Array[Partition](3)
+        for (i <- 0 until 3) {
+          array(i) = new HadoopPartition(id, i, inputSplits(i))
+        }
+        array
+      } else {
+        val array = new Array[Partition](inputSplits.size)
+        for (i <- 0 until inputSplits.size) {
+          array(i) = new HadoopPartition(id, i, inputSplits(i))
+        }
+        array
       }
-      array
     } catch {
       case e: InvalidInputException if ignoreMissingFiles =>
         logWarning(s"${jobConf.get(FileInputFormat.INPUT_DIR)} doesn't exist and no" +
@@ -243,6 +252,7 @@ class HadoopRDD[K, V](
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
+      logInfo(s"Sampled run $isProfileRun")
 
       private val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
@@ -308,10 +318,22 @@ class HadoopRDD[K, V](
 
       private val key: K = if (reader == null) null.asInstanceOf[K] else reader.createKey()
       private val value: V = if (reader == null) null.asInstanceOf[V] else reader.createValue()
+      var cnt = 0
 
       override def getNext(): (K, V) = {
         try {
-          finished = !reader.next(key, value)
+          if (isProfileRun) {
+            if (cnt >= 100) {
+              logInfo(s"Sampled run reading finished!!")
+              finished = true
+            } else {
+              finished = !reader.next(key, value)
+              cnt += 1
+            }
+
+          } else {
+            finished = !reader.next(key, value)
+          }
         } catch {
           case e: FileNotFoundException if ignoreMissingFiles =>
             logWarning(s"Skipped missing file: ${split.inputSplit}", e)

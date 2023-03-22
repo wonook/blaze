@@ -18,20 +18,17 @@
 package org.apache.spark.rdd
 
 import java.util.Random
-
-import scala.collection.{mutable, Map}
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.{Map, mutable}
+import scala.collection.mutable.{ArrayBuffer, ArrayStack, HashSet}
 import scala.io.Codec
 import scala.language.implicitConversions
 import scala.ref.WeakReference
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 import scala.util.hashing
-
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.io.{BytesWritable, NullWritable, Text}
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.TextOutputFormat
-
 import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
@@ -45,12 +42,11 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.storage.blaze.{AbstractBlazeRpcEndpoint, BlazeParameters}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
-import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap,
-  Utils => collectionUtils}
-import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler,
-  SamplingUtils}
+import org.apache.spark.util.collection.{ExternalAppendOnlyMap, OpenHashMap, Utils => collectionUtils}
+import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, PoissonSampler, SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -156,6 +152,10 @@ abstract class RDD[T: ClassTag](
     this
   }
 
+  val autoCaching = conf.get(BlazeParameters.AUTOCACHING)
+  val lazyAutoCaching = conf.get(BlazeParameters.LAZY_AUTOCACHING)
+  val autoUnpersist = conf.get(BlazeParameters.AUTOUNPERSIST)
+
   /**
    * Mark this RDD for persisting using the specified level.
    *
@@ -163,17 +163,22 @@ abstract class RDD[T: ClassTag](
    * @param allowOverride whether to override any existing level with the new one
    */
   private def persist(newLevel: StorageLevel, allowOverride: Boolean): this.type = {
-    // TODO: Handle changes of StorageLevel
-    if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {
-      throw SparkCoreErrors.cannotChangeStorageLevelError()
+    if (autoCaching || lazyAutoCaching) {
+      storageLevel = newLevel
+    } else {
+      // TODO: Handle changes of StorageLevel
+      if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {
+        throw SparkCoreErrors.cannotChangeStorageLevelError()
+      }
+      // If this is the first time this RDD is marked for persisting, register it
+      // with the SparkContext for cleanups and accounting. Do this only once.
+      if (storageLevel == StorageLevel.NONE) {
+        sc.cleaner.foreach(_.registerRDDForCleanup(this))
+        sc.persistRDD(this)
+      }
+      storageLevel = newLevel
     }
-    // If this is the first time this RDD is marked for persisting, register it
-    // with the SparkContext for cleanups and accounting. Do this only once.
-    if (storageLevel == StorageLevel.NONE) {
-      sc.cleaner.foreach(_.registerRDDForCleanup(this))
-      sc.persistRDD(this)
-    }
-    storageLevel = newLevel
+
     this
   }
 
@@ -210,9 +215,12 @@ abstract class RDD[T: ClassTag](
    * @return This RDD.
    */
   def unpersist(blocking: Boolean = false): this.type = {
-    logInfo(s"Removing RDD $id from persistence list")
-    sc.unpersistRDD(id, blocking)
-    storageLevel = StorageLevel.NONE
+    if (!autoUnpersist) {
+      logInfo(s"Removing RDD $id from persistence list")
+      // Follow user API-based decisions
+      sc.unpersistRDD(id, blocking)
+      storageLevel = StorageLevel.NONE
+    }
     this
   }
 
@@ -323,11 +331,22 @@ abstract class RDD[T: ClassTag](
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
-    if (storageLevel != StorageLevel.NONE) {
-      getOrCompute(split, context)
+    val result = if (autoCaching || lazyAutoCaching) {
+      if (SparkEnv.get.blockManager.isCachedRDD(this.id)) {
+        this.storageLevel = StorageLevel.MEMORY_ONLY
+        getOrCompute(split, context)
+      } else {
+        this.storageLevel = StorageLevel.NONE
+        computeOrReadCheckpoint(split, context)
+      }
     } else {
-      computeOrReadCheckpoint(split, context)
+      if (storageLevel != StorageLevel.NONE) {
+        getOrCompute(split, context)
+      } else {
+        computeOrReadCheckpoint(split, context)
+      }
     }
+    result
   }
 
   /**
@@ -352,6 +371,230 @@ abstract class RDD[T: ClassTag](
 
     // In case there is a cycle, do not include the root itself
     ancestors.filterNot(_ == this).toSeq
+  }
+
+  private[spark] def getAllAncestors: Set[RDD[_]] = {
+    val allAncestors = new mutable.HashSet[RDD[_]]
+
+    def visit(rdd: RDD[_]) {
+      val dependencies = rdd.dependencies
+      val parents = dependencies.map(_.rdd)
+      val parentsNotVisited = parents.filterNot(allAncestors.contains)
+      parentsNotVisited.foreach { parent =>
+        allAncestors.add(parent)
+        visit(parent)
+      }
+    }
+
+    visit(this)
+
+    // In case there is a cycle, do not include the root itself
+    allAncestors.toSet
+  }
+
+  private[spark] def createCachedAncestorsWithSize: OpenHashMap[RDD[_], Int] = {
+    val cachedAncestors = new mutable.HashSet[RDD[_]]()
+    val ret = new OpenHashMap[RDD[_], Int]()
+
+    def visit(rdd: RDD[_]) {
+      val dependencies = rdd.dependencies
+      val parents = dependencies.map(_.rdd)
+      val parentsNotVisited = parents.filterNot(cachedAncestors.contains)
+      parentsNotVisited.foreach { parent =>
+        cachedAncestors.add(parent)
+        visit(parent)
+      }
+    }
+
+    visit(this)
+
+    // In case there is a cycle, do not include the root itself
+    cachedAncestors.filterNot(_ == this)
+      .filter(ancestor => ancestor.getStorageLevel != StorageLevel.NONE)
+      .foreach(cachedAncestor => ret(cachedAncestor) = 0)
+    ret
+  }
+
+  /**
+   * Find all cached ancestors of the given cached RDD.
+   * @param rddId of the given cached RDD
+   * @param visited
+   * @return all cached ancestors of the RDD
+   */
+  def dfsGetCachedAncestors(rdd: RDD[_]): mutable.HashSet[Int] = {
+    val cachedAncestors = new mutable.HashSet[Int]()
+    val visited = new HashSet[RDD[_]]
+    val waitingForVisit = new ArrayStack[RDD[_]]
+
+    def visit(rdd: RDD[_]) {
+      if (!visited(rdd)) {
+        visited += rdd
+
+        if (rdd.storageLevel != StorageLevel.NONE && !cachedAncestors.contains(rdd.id)) {
+          cachedAncestors.add(rdd.id)
+        }
+
+        for (dep <- rdd.dependencies) {
+          val parent = dep.rdd
+          if (parent.storageLevel != StorageLevel.NONE && !cachedAncestors.contains(parent.id)) {
+            cachedAncestors.add(parent.id)
+          }
+
+          dep match {
+            // We never go beyond the shuffle boundary,
+            // so it's safe to say that all parents share the same stageId as this rdd
+            case wideDep: ShuffleDependency[_, _, _] =>
+            case narrowDep: NarrowDependency[_] =>
+              waitingForVisit.push(narrowDep.rdd)
+          }
+        }
+      }
+    }
+
+    waitingForVisit.push(rdd)
+    while (waitingForVisit.nonEmpty) {
+      visit(waitingForVisit.pop())
+    }
+
+    cachedAncestors
+  }
+
+  def logCachedReverseDep(stageId: Int, jobId: Int, rddId: Int,
+                          cachedAncestors: mutable.HashSet[Int]): Unit = {
+    val sb = new StringBuilder
+    cachedAncestors.map(ancestorRDDId => s"$ancestorRDDId ").foreach(s => sb.append(s))
+    logInfo(s"[Cached Stage Reverse Dep] Job $jobId Stage $stageId Added entry: " +
+      s"cached RDD$rddId cached ancestors ${sb.toString()}")
+  }
+
+  def buildCachedDependency(reverseDep: Map[Int, mutable.Set[Int]]):
+  mutable.Map[Int, mutable.HashSet[Int]] = {
+    val dep = new mutable.HashMap[Int, mutable.HashSet[Int]]()
+    reverseDep.foreach {
+      pair =>
+        val chlidRDDId = pair._1
+        val parentRDDIds = pair._2
+        parentRDDIds.foreach (parentRDDId => {
+          if (!dep.contains(parentRDDId)) {
+            dep(parentRDDId) = new mutable.HashSet[Int]()
+          }
+          dep(parentRDDId).add(chlidRDDId)
+        })
+    }
+    dep
+  }
+
+  def extractCachedReverseDependency(stageId: Int, jobId: Int):
+  mutable.HashMap[Int, mutable.HashSet[Int]] = {
+    val cachedReverseDep = new mutable.HashMap[Int, mutable.HashSet[Int]]()
+
+    val visited = new HashSet[RDD[_]]
+    val waitingForVisit = new ArrayStack[RDD[_]]
+
+    def visit(rdd: RDD[_]) {
+      if (!visited(rdd)) {
+        visited += rdd
+
+        // 1. for user-cached RDDs
+        if (rdd.storageLevel != StorageLevel.NONE && !cachedReverseDep.contains(rdd.id)) {
+          val cachedAncestors = dfsGetCachedAncestors(rdd)
+          cachedAncestors.remove(rdd.id)
+          cachedReverseDep.put(rdd.id, cachedAncestors)
+          logCachedReverseDep(stageId, jobId, rdd.id, cachedAncestors)
+        }
+
+        // 2. add this RDD's parents
+        for (dep <- rdd.dependencies) {
+          val parent = dep.rdd
+          if (parent.storageLevel != StorageLevel.NONE
+            && !cachedReverseDep.contains(parent.id)) {
+            val cachedAncestors = dfsGetCachedAncestors(parent)
+            cachedAncestors.remove(parent.id)
+            cachedReverseDep.put(parent.id, cachedAncestors)
+            logCachedReverseDep(stageId, jobId, parent.id, cachedAncestors)
+          }
+
+          dep match {
+            // We never go beyond the shuffle boundary,
+            // so it's safe to say that all parents share the same stageId as this rdd
+            case wideDep: ShuffleDependency[_, _, _] =>
+            case narrowDep: NarrowDependency[_] =>
+              waitingForVisit.push(narrowDep.rdd)
+          }
+        }
+      }
+    }
+
+    waitingForVisit.push(this)
+    while (waitingForVisit.nonEmpty) {
+      visit(waitingForVisit.pop())
+    }
+
+    cachedReverseDep
+  }
+
+  /**
+   * @param stageId
+   * @param jobId
+   * @return map [parent RDD ID : Set of children RDD IDs] of this stage
+   */
+  def extractStageDependency(stageId: Int, jobId: Int,
+                             blazeRpcEndpoint: AbstractBlazeRpcEndpoint):
+  mutable.HashMap[Int, mutable.HashSet[Int]] = {
+    logInfo(s"[Extract Stage DAG] Started: job $jobId stage $stageId")
+
+    val visited = new HashSet[RDD[_]]
+    val waitingForVisit = new ArrayStack[RDD[_]]
+    val newStageDep = new mutable.HashMap[Int, mutable.HashSet[Int]]
+
+    def visit(rdd: RDD[_]) {
+      if (!visited(rdd)) {
+        visited += rdd
+
+        if (rdd.isInstanceOf[ShuffledRDD[_, _, _]]) {
+          blazeRpcEndpoint.addShuffledRDD(rdd.id)
+        }
+
+        // Identify and mark user-cached RDDs
+        if (rdd.storageLevel != StorageLevel.NONE) {
+          blazeRpcEndpoint.addUserCachedRDD(rdd.id)
+        }
+
+        if (!newStageDep.contains(rdd.id)) {
+          newStageDep.put(rdd.id, new HashSet[Int])
+        }
+
+        // 2. Add this RDD's parents
+        for (dep <- rdd.dependencies) {
+          val parent = dep.rdd
+
+          if (!newStageDep.contains(parent.id)) {
+            newStageDep.put(parent.id, new HashSet[Int])
+          }
+
+          newStageDep(parent.id).add(rdd.id)
+          val sb = new StringBuilder
+          newStageDep(parent.id).map(childRddId => s"$childRddId ").foreach(s => sb.append(s))
+          logInfo(s"[Extract Stage DAG] Updated entry for " +
+            s"parent RDD ${parent.id} child RDD ${sb.toString()}")
+
+          dep match {
+            // We never go beyond the shuffle boundary,
+            // so it's safe to say that all parents share the same stageId as this rdd
+            case wideDep: ShuffleDependency[_, _, _] =>
+            case narrowDep: NarrowDependency[_] =>
+              waitingForVisit.push(narrowDep.rdd)
+          }
+        }
+      }
+    }
+
+    waitingForVisit.push(this)
+    while (waitingForVisit.nonEmpty) {
+      visit(waitingForVisit.pop())
+    }
+
+    newStageDep
   }
 
   /**

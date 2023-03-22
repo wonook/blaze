@@ -17,11 +17,11 @@
 
 package org.apache.spark.rdd
 
+import org.apache.spark.storage.RDDBlockId
+
 import java.io.{IOException, ObjectOutputStream}
-
 import scala.reflect.ClassTag
-
-import org.apache.spark.{OneToOneDependency, Partition, SparkContext, TaskContext}
+import org.apache.spark.{OneToOneDependency, Partition, SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.util.Utils
 
 private[spark] class ZippedPartitionsPartition(
@@ -86,7 +86,32 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
-    f(rdd1.iterator(partitions(0), context), rdd2.iterator(partitions(1), context))
+
+    val st1 = System.currentTimeMillis()
+    val rdd1Iter = rdd1.iterator(partitions(0), context)
+    val leftParentCompTime = System.currentTimeMillis() - st1
+
+    val st2 = System.currentTimeMillis()
+    val rdd2Iter = rdd2.iterator(partitions(1), context)
+    val rightParentCompTime = System.currentTimeMillis() - st2
+
+    val st3 = System.currentTimeMillis()
+    val res = f(rdd1Iter, rdd2Iter)
+    val compTime = System.currentTimeMillis() - st3
+
+    val thisBlockId = RDDBlockId(id, s.index)
+    val leftParentBlockId = RDDBlockId(rdd1.id, s.index)
+    val rightParentBlockId = RDDBlockId(rdd2.id, s.index)
+    val keyForLeftParent = s"${leftParentBlockId.name}-${thisBlockId.name}"
+    val keyForRightParent = s"${rightParentBlockId.name}-${thisBlockId.name}"
+
+    SparkEnv.get.blockManager.blazeManager
+      .sendCompTime(thisBlockId, keyForLeftParent, leftParentCompTime + compTime)
+
+    SparkEnv.get.blockManager.blazeManager
+      .sendCompTime(thisBlockId, keyForRightParent, rightParentCompTime + compTime)
+
+    res
   }
 
   override def clearDependencies(): Unit = {

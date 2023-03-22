@@ -133,6 +133,8 @@ final class BypassMergeSortShuffleWriter<K, V>
 
   @Override
   public void write(Iterator<Product2<K, V>> records) throws IOException {
+    logger.info("Entered BypassMergeSortShuffleWriter.write()");
+    final long st = System.currentTimeMillis();
     assert (partitionWriters == null);
     ShuffleMapOutputWriter mapOutputWriter = shuffleExecutorComponents
         .createMapOutputWriter(shuffleId, mapId, numPartitions);
@@ -180,6 +182,8 @@ final class BypassMergeSortShuffleWriter<K, V>
       partitionLengths = writePartitionedData(mapOutputWriter);
       mapStatus = MapStatus$.MODULE$.apply(
         blockManager.shuffleServerId(), partitionLengths, mapId);
+      final long et = System.currentTimeMillis();
+      logger.info("TGLOG ShuffleWrite None " + (et - st));
     } catch (Exception e) {
       try {
         mapOutputWriter.abort(e);

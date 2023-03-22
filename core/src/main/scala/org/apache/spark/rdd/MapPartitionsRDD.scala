@@ -17,9 +17,10 @@
 
 package org.apache.spark.rdd
 
-import scala.reflect.ClassTag
+import org.apache.spark.storage.RDDBlockId
 
-import org.apache.spark.{Partition, TaskContext}
+import scala.reflect.ClassTag
+import org.apache.spark.{Partition, SparkEnv, TaskContext}
 
 /**
  * An RDD that applies the provided function to every partition of the parent RDD.
@@ -48,8 +49,25 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  override def compute(split: Partition, context: TaskContext): Iterator[U] =
-    f(context, split.index, firstParent[T].iterator(split, context))
+  override def compute(split: Partition, context: TaskContext): Iterator[U] = {
+
+    // time to create parent iterator
+    val parentCompStart = System.currentTimeMillis()
+    val parentCompTime = System.currentTimeMillis() - parentCompStart
+
+    // time to compute f
+    val compStart = System.currentTimeMillis()
+    val res = f(context, split.index, firstParent[T].iterator(split, context))
+    val compTime = System.currentTimeMillis() - compStart
+
+    val parentBlockId = RDDBlockId(firstParent[T].id, split.index)
+    val thisBlockId = RDDBlockId(id, split.index)
+    val key = s"${parentBlockId.name}-${thisBlockId.name}"
+    val totalCompTime = parentCompTime + compTime
+    SparkEnv.get.blockManager.blazeManager.sendCompTime(thisBlockId, key, totalCompTime)
+
+    res
+  }
 
   override def clearDependencies(): Unit = {
     super.clearDependencies()
