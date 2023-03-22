@@ -19,18 +19,15 @@ package org.apache.spark.streaming
 
 import java.io.File
 import java.nio.ByteBuffer
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
@@ -43,6 +40,7 @@ import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
+import org.apache.spark.storage.blaze.BlazeManager
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
 import org.apache.spark.util.{ManualClock, Utils}
@@ -289,7 +287,9 @@ abstract class BaseReceivedBlockHandlerSuite(enableEncryption: Boolean)
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val memManager = new UnifiedMemoryManager(conf, maxMem, maxMem / 2, 1)
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
-    val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
+    val blazeManager = new BlazeManager(null)
+    val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster,
+      blazeManager, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(blockManager.memoryStore)
     blockManager.initialize("app-id")

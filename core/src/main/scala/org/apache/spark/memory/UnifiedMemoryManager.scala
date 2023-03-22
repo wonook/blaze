@@ -57,6 +57,8 @@ private[spark] class UnifiedMemoryManager(
     onHeapStorageRegionSize,
     maxHeapMemory - onHeapStorageRegionSize) {
 
+  logInfo("UnifiedMemoryManager is created")
+
   private def assertInvariants(): Unit = {
     assert(onHeapExecutionMemoryPool.poolSize + onHeapStorageMemoryPool.poolSize == maxHeapMemory)
     assert(
@@ -148,6 +150,36 @@ private[spark] class UnifiedMemoryManager(
       numBytes, taskAttemptId, maybeGrowExecutionPool, () => computeMaxExecutionPoolSize)
   }
 
+  override def enoughMemory(bytesToStore: Long,
+                            memoryMode: MemoryMode): Boolean = synchronized {
+    val (executionPool, storagePool, maxMemory) = memoryMode match {
+      case MemoryMode.ON_HEAP => (
+        onHeapExecutionMemoryPool,
+        onHeapStorageMemoryPool,
+        maxOnHeapStorageMemory)
+      case MemoryMode.OFF_HEAP => (
+        offHeapExecutionMemoryPool,
+        offHeapStorageMemoryPool,
+        maxOffHeapStorageMemory)
+    }
+
+    logInfo(s"Storage Pool: estimatedSize: $bytesToStore Free: ${storagePool.memoryFree}")
+    if (bytesToStore > storagePool.memoryFree) {
+      // There is not enough free memory in the storage pool, so try to borrow free memory from
+      // the execution pool.
+      val memoryBorrowedFromExecution = Math.min(executionPool.memoryFree,
+        bytesToStore - storagePool.memoryFree)
+      if (memoryBorrowedFromExecution > 0) {
+        val free = storagePool.memoryFree + memoryBorrowedFromExecution
+        bytesToStore <= free
+      } else {
+        false
+      }
+    } else {
+      true
+    }
+  }
+
   override def acquireStorageMemory(
       blockId: BlockId,
       numBytes: Long,
@@ -175,8 +207,10 @@ private[spark] class UnifiedMemoryManager(
       // the execution pool.
       val memoryBorrowedFromExecution = Math.min(executionPool.memoryFree,
         numBytes - storagePool.memoryFree)
-      executionPool.decrementPoolSize(memoryBorrowedFromExecution)
-      storagePool.incrementPoolSize(memoryBorrowedFromExecution)
+      if (memoryBorrowedFromExecution > 0) {
+        executionPool.decrementPoolSize(memoryBorrowedFromExecution)
+        storagePool.incrementPoolSize(memoryBorrowedFromExecution)
+      }
     }
     storagePool.acquireMemory(blockId, numBytes)
   }

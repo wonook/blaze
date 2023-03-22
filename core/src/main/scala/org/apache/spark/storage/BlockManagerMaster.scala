@@ -20,12 +20,11 @@ package org.apache.spark.storage
 import scala.collection.generic.CanBuildFrom
 import scala.collection.immutable.Iterable
 import scala.concurrent.Future
-
 import org.apache.spark.SparkConf
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.storage.BlockManagerMessages.{LogString, _}
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 private[spark]
@@ -94,6 +93,10 @@ class BlockManagerMaster(
       logInfo(s"Registered BlockManager $updatedId")
     }
     updatedId
+  }
+
+  def sendLog(log: String): Unit = {
+    driverEndpoint.ask(LogString(log))
   }
 
   def updateBlockInfo(
@@ -304,4 +307,8 @@ class BlockManagerMaster(
 private[spark] object BlockManagerMaster {
   val DRIVER_ENDPOINT_NAME = "BlockManagerMaster"
   val DRIVER_HEARTBEAT_ENDPOINT_NAME = "BlockManagerMasterHeartbeat"
+}
+
+private[spark] object BlazeManager {
+  val DRIVER_ENDPOINT_NAME = "BlazeManager"
 }

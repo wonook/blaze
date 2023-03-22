@@ -18,12 +18,11 @@
 package org.apache.spark.storage
 
 import java.io._
-import java.lang.ref.{ReferenceQueue => JReferenceQueue, WeakReference}
+import java.lang.ref.{WeakReference, ReferenceQueue => JReferenceQueue}
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 import java.util.Collections
 import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit}
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -32,12 +31,10 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
-
 import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.esotericsoftware.kryo.KryoException
 import com.google.common.cache.CacheBuilder
 import org.apache.commons.io.IOUtils
-
 import org.apache.spark._
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
@@ -59,6 +56,7 @@ import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
+import org.apache.spark.storage.blaze.{BlazeManager, BlazeParameters}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
@@ -174,6 +172,7 @@ private[spark] class BlockManager(
     val executorId: String,
     rpcEnv: RpcEnv,
     val master: BlockManagerMaster,
+    val blazeManager: BlazeManager,
     val serializerManager: SerializerManager,
     val conf: SparkConf,
     memoryManager: MemoryManager,
@@ -183,6 +182,7 @@ private[spark] class BlockManager(
     securityManager: SecurityManager,
     externalBlockStoreClient: Option[ExternalBlockStoreClient])
   extends BlockDataManager with BlockEvictionHandler with Logging {
+  @transient lazy val mylogger = org.apache.log4j.LogManager.getLogger("myLogger")
 
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)`
   private[spark] val externalShuffleServiceEnabled: Boolean = externalBlockStoreClient.isDefined
@@ -200,6 +200,9 @@ private[spark] class BlockManager(
     new DiskBlockManager(conf, deleteFilesOnStop = deleteFilesOnStop, isDriver = isDriver)
   }
 
+  val IS_BLAZE = conf.get(BlazeParameters.COST_FUNCTION).contains("Blaze")
+  private val DISKSTORE_ENABLED = conf.get(BlazeParameters.ENABLE_DISKSTORE)
+
   // Visible for testing
   private[storage] val blockInfoManager = new BlockInfoManager
 
@@ -207,9 +210,12 @@ private[spark] class BlockManager(
     ThreadUtils.newDaemonCachedThreadPool("block-manager-future", 128))
 
   // Actual storage of where blocks are kept
+  // This also implements eviction policy
   private[spark] val memoryStore =
-    new MemoryStore(conf, blockInfoManager, serializerManager, memoryManager, this)
-  private[spark] val diskStore = new DiskStore(conf, diskBlockManager, securityManager)
+  new MemoryStore(conf, blockInfoManager, serializerManager, memoryManager, this,
+    blazeManager, executorId)
+  private[spark] val diskStore = new DiskStore(conf, diskBlockManager, securityManager,
+    blazeManager, executorId)
   memoryManager.setMemoryStore(memoryStore)
 
   // Note: depending on the memory manager, `maxMemory` may actually vary over time.
@@ -586,7 +592,7 @@ private[spark] class BlockManager(
         shuffleManager.getClass.getName
       }
     val shuffleConfig = new ExecutorShuffleInfo(
-      diskBlockManager.localDirsString,
+      diskBlockManager.shuffleLocalDirs.map(_.toString),
       diskBlockManager.subDirsPerLocalDir,
       shuffleManagerMeta)
 
@@ -1871,14 +1877,15 @@ private[spark] class BlockManager(
    */
   private[storage] override def dropFromMemory[T: ClassTag](
       blockId: BlockId,
+      spillToDisk: Boolean,
       data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
-    logInfo(s"Dropping block $blockId from memory")
+    logInfo(s"Dropping block $blockId from memory in $executorId")
     val info = blockInfoManager.assertBlockIsLockedForWriting(blockId)
     var blockIsUpdated = false
-    val level = info.level
+//    val level = info.level
 
     // Drop to disk, if storage level requires
-    if (level.useDisk && !diskStore.contains(blockId)) {
+    if (spillToDisk && !diskStore.contains(blockId)) {
       logInfo(s"Writing block $blockId to disk")
       data() match {
         case Left(elements) =>
@@ -1893,9 +1900,11 @@ private[spark] class BlockManager(
           diskStore.putBytes(blockId, bytes)
       }
       blockIsUpdated = true
+    } else {
+      logWarning(s"Block $blockId already exist in DiskStore, won't drop it")
     }
 
-    // Actually drop from memory store
+    // Remove from MemoryStore
     val droppedMemorySize =
       if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
     val blockIsRemoved = memoryStore.remove(blockId)
@@ -1905,6 +1914,7 @@ private[spark] class BlockManager(
       logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
     }
 
+    // Report it to the driver
     val status = getCurrentBlockStatus(blockId, info)
     if (info.tellMaster) {
       reportBlockStatus(blockId, status, droppedMemorySize)

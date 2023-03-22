@@ -18,14 +18,13 @@
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
-
 import org.apache.spark._
 import org.apache.spark.graphx.impl.RoutingTablePartition
 import org.apache.spark.graphx.impl.ShippableVertexPartition
 import org.apache.spark.graphx.impl.VertexAttributeBlock
 import org.apache.spark.graphx.impl.VertexRDDImpl
 import org.apache.spark.rdd._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**
  * Extends `RDD[(VertexId, VD)]` by ensuring that there is only one entry for each vertex and by
@@ -66,7 +65,21 @@ abstract class VertexRDD[VD](
    * Provides the `RDD[(VertexId, VD)]` equivalent output.
    */
   override def compute(part: Partition, context: TaskContext): Iterator[(VertexId, VD)] = {
-    firstParent[ShippableVertexPartition[VD]].iterator(part, context).next().iterator
+    val parentCompStart = System.currentTimeMillis()
+    val parentIter = firstParent[ShippableVertexPartition[VD]].iterator(part, context)
+    val parentCompTime = System.currentTimeMillis() - parentCompStart
+
+    val st = System.currentTimeMillis()
+    val res = parentIter.next().iterator
+    val compTime = System.currentTimeMillis() - st
+
+    val parentBlockId = RDDBlockId(firstParent[ShippableVertexPartition[VD]].id, part.index)
+    val thisBlockId = RDDBlockId(id, part.index)
+    val key = s"${parentBlockId.name}-${thisBlockId.name}"
+    val totalCompTime = parentCompTime + compTime
+    SparkEnv.get.blockManager.blazeManager.sendCompTime(thisBlockId, key, totalCompTime)
+
+    res
   }
 
   /**

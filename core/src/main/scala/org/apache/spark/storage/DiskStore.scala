@@ -22,18 +22,16 @@ import java.nio.ByteBuffer
 import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
 import java.nio.channels.FileChannel.MapMode
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-
 import scala.collection.mutable.ListBuffer
-
 import com.google.common.io.Closeables
 import io.netty.channel.DefaultFileRegion
 import org.apache.commons.io.FileUtils
-
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.storage.blaze.BlazeManager
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -44,7 +42,9 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 private[spark] class DiskStore(
     conf: SparkConf,
     diskManager: DiskBlockManager,
-    securityManager: SecurityManager) extends Logging {
+    securityManager: SecurityManager,
+    blazeManager: BlazeManager,
+    executorId: String) extends Logging {
 
   private val minMemoryMapBytes = conf.get(config.STORAGE_MEMORY_MAP_THRESHOLD)
   private val maxMemoryMapBytes = conf.get(config.MEMORY_MAP_LIMIT_FOR_TESTS)
@@ -72,20 +72,50 @@ private[spark] class DiskStore(
       }
     }
     logDebug(s"Attempting to put block $blockId")
-    val startTimeNs = System.nanoTime()
-    val file = diskManager.getFile(blockId)
+    if (!blockId.isRDD) {
+      val startTimeNs = System.nanoTime()
+      val file = diskManager.getFile(blockId)
 
-    // SPARK-37618: If fetching cached RDDs from the shuffle service is enabled, we must make
-    // the file world readable, as it will not be owned by the group running the shuffle service
-    // in a secure environment. This is due to changing directory permissions to allow deletion,
-    if (shuffleServiceFetchRddEnabled) {
-      diskManager.createWorldReadableFile(file)
+      // SPARK-37618: If fetching cached RDDs from the shuffle service is enabled, we must make
+      // the file world readable, as it will not be owned by the group running the shuffle service
+      // in a secure environment. This is due to changing directory permissions to allow deletion,
+      if (shuffleServiceFetchRddEnabled) {
+        diskManager.createWorldReadableFile(file)
+      }
+      val out = new CountingWritableChannel(openForWrite(file))
+      var threwException: Boolean = true
+      try {
+        writeFunc(out)
+        blockSizes.put(blockId, out.getCount)
+        threwException = false
+      } finally {
+        try {
+          out.close()
+        } catch {
+          case ioe: IOException =>
+            if (!threwException) {
+              threwException = true
+              throw ioe
+            }
+        } finally {
+          if (threwException) {
+            remove(blockId)
+          }
+        }
+      }
+      logInfo(s"Executor ${executorId}, Block ${file.getName} stored as " +
+        s"${Utils.bytesToString(file.length())} file on disk in " +
+        s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
     }
+
+    val startSpilling = System.currentTimeMillis
+    val file = diskManager.getFile(blockId)
     val out = new CountingWritableChannel(openForWrite(file))
     var threwException: Boolean = true
     try {
       writeFunc(out)
       blockSizes.put(blockId, out.getCount)
+
       threwException = false
     } finally {
       try {
@@ -97,13 +127,17 @@ private[spark] class DiskStore(
             throw ioe
           }
       } finally {
-         if (threwException) {
+        if (threwException) {
           remove(blockId)
         }
       }
     }
-    logDebug(s"Block ${file.getName} stored as ${Utils.bytesToString(file.length())} file" +
-      s" on disk in ${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")
+
+    val spillTime = System.currentTimeMillis - startSpilling
+    val serializedSize = blockSizes.get(blockId)
+
+    // val stageId = TaskContext.get().stageId()
+    blazeManager.materialized(blockId, -1, executorId, spillTime, serializedSize, true)
   }
 
   def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
@@ -132,7 +166,7 @@ private[spark] class DiskStore(
     if (file.exists()) {
       val ret = file.delete()
       if (!ret) {
-        logWarning(s"Error deleting ${file.getPath()}")
+        logWarning(s"Error deleting ${file.getPath()} from DiskStore")
       }
       ret
     } else {

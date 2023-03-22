@@ -53,6 +53,7 @@ private[spark] class DiskBlockManager(
   extends Logging {
 
   private[spark] val subDirsPerLocalDir = conf.get(config.DISKSTORE_SUB_DIRECTORIES)
+  private[spark] val shuffleLocalDirs: Array[File] = createShuffleLocalDirs(conf)
 
   /* Create one local directory for each path mentioned in spark.local.dir; then, inside this
    * directory, create multiple subdirectories that we will hash files into, in order to avoid
@@ -63,11 +64,18 @@ private[spark] class DiskBlockManager(
     System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
   }
 
+  if (shuffleLocalDirs.isEmpty) {
+    logError("Failed to create any local dir for shuffle.")
+    System.exit(ExecutorExitCode.DISK_STORE_FAILED_TO_CREATE_DIR)
+  }
+
   private[spark] val localDirsString: Array[String] = localDirs.map(_.toString)
 
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
+  private val shuffleSubDirs = Array
+    .fill(shuffleLocalDirs.length)(new Array[File](subDirsPerLocalDir))
 
   // Get merge directory name, append attemptId if there is any
   private val mergeDirName =
@@ -77,6 +85,30 @@ private[spark] class DiskBlockManager(
   createLocalDirsForMergedShuffleBlocks()
 
   private val shutdownHook = addShutdownHook()
+
+  def getShuffleFile(filename: String): File = {
+    // Figure out which local directory it hashes to, and which subdirectory in that
+    val hash = Utils.nonNegativeHash(filename)
+    val dirId = hash % shuffleLocalDirs.length
+    val subDirId = (hash / shuffleLocalDirs.length) % subDirsPerLocalDir
+
+    // Create the subdirectory if it doesn't already exist
+    val subDir = shuffleSubDirs(dirId).synchronized {
+      val old = shuffleSubDirs(dirId)(subDirId)
+      if (old != null) {
+        old
+      } else {
+        val newDir = new File(shuffleLocalDirs(dirId), "%02x".format(subDirId))
+        if (!newDir.exists() && !newDir.mkdir()) {
+          throw new IOException(s"Failed to create local dir in $newDir.")
+        }
+        shuffleSubDirs(dirId)(subDirId) = newDir
+        newDir
+      }
+    }
+
+    new File(subDir, filename)
+  }
 
   // If either of these features are enabled, we must change permissions on block manager
   // directories and files to accomodate the shuffle service deleting files in a secure environment.
@@ -124,6 +156,7 @@ private[spark] class DiskBlockManager(
   }
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
+  def getShuffleFile(blockId: BlockId): File = getShuffleFile(blockId.name)
 
   /**
    * This should be in sync with
@@ -160,7 +193,7 @@ private[spark] class DiskBlockManager(
   /** List all the files currently stored on disk by the disk manager. */
   def getAllFiles(): Seq[File] = {
     // Get all the files inside the array of array of directories
-    subDirs.flatMap { dir =>
+    (shuffleSubDirs ++ subDirs).flatMap { dir =>
       dir.synchronized {
         // Copy the content of dir because it may be modified in other threads
         dir.clone()
@@ -228,10 +261,10 @@ private[spark] class DiskBlockManager(
   /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
   def createTempShuffleBlock(): (TempShuffleBlockId, File) = {
     var blockId = new TempShuffleBlockId(UUID.randomUUID())
-    while (getFile(blockId).exists()) {
+    while (getShuffleFile(blockId).exists()) {
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
-    val tmpFile = getFile(blockId)
+    val tmpFile = getShuffleFile(blockId)
     if (permissionChangingRequired) {
       // SPARK-37618: we need to make the file world readable because the parent will
       // lose the setgid bit when making it group writable. Without this the shuffle
@@ -241,12 +274,28 @@ private[spark] class DiskBlockManager(
     (blockId, tmpFile)
   }
 
+  private def createLocalDirs(conf: SparkConf): Array[File] = {
+    conf.get("spark.caching.dir")
+      .split(File.pathSeparator)
+      .flatMap { rootDir =>
+        try {
+          val localDir = Utils.createDirectory(rootDir, "blockmgr")
+          logInfo(s"Created local directory at $localDir")
+          Some(localDir)
+        } catch {
+          case e: IOException =>
+            logError(s"Failed to create local dir in $rootDir. Ignoring this directory.", e)
+            None
+        }
+      }
+  }
+
   /**
    * Create local directories for storing block data. These directories are
    * located inside configured local directories and won't
    * be deleted on JVM exit when using the external shuffle service.
    */
-  private def createLocalDirs(conf: SparkConf): Array[File] = {
+  private def createShuffleLocalDirs(conf: SparkConf): Array[File] = {
     Utils.getConfiguredLocalDirs(conf).flatMap { rootDir =>
       try {
         val localDir = Utils.createDirectory(rootDir, "blockmgr")
@@ -367,7 +416,7 @@ private[spark] class DiskBlockManager(
 
   private def doStop(): Unit = {
     if (deleteFilesOnStop) {
-      localDirs.foreach { localDir =>
+      (shuffleLocalDirs ++ localDirs).foreach { localDir =>
         if (localDir.isDirectory() && localDir.exists()) {
           try {
             if (!ShutdownHookManager.hasRootAsShutdownDeleteDir(localDir)) {

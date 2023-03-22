@@ -19,25 +19,23 @@ package org.apache.spark.storage
 
 import java.io.IOException
 import java.util.{HashMap => JHashMap}
-import java.util.concurrent.TimeUnit
-
+import java.util.concurrent.{ConcurrentHashMap, Executors, TimeUnit}
 import scala.collection.JavaConverters._
-import scala.collection.mutable
+import scala.collection.{concurrent, mutable}
 import scala.concurrent.{ExecutionContext, Future, TimeoutException}
 import scala.util.Random
 import scala.util.control.NonFatal
-
 import com.google.common.cache.CacheBuilder
-
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
 import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.storage.blaze.AbstractBlazeRpcEndpoint
 import org.apache.spark.util.{RpcUtils, ThreadUtils, Utils}
 
 /**
@@ -56,6 +54,9 @@ class BlockManagerMasterEndpoint(
     shuffleManager: ShuffleManager,
     isDriver: Boolean)
   extends IsolatedRpcEndpoint with Logging {
+  @transient lazy val mylogger = org.apache.log4j.LogManager.getLogger("myLogger")
+
+  val executorBlockManagerMap = new ConcurrentHashMap[String, BlockManagerId]().asScala
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =
@@ -75,7 +76,7 @@ class BlockManagerMasterEndpoint(
   private val decommissioningBlockManagerSet = new mutable.HashSet[BlockManagerId]
 
   // Mapping from block id to the set of block managers that have the block.
-  private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
+  private val blockLocations = new ConcurrentHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
   // Mapping from host name to shuffle (mergers) services where the current app
   // registered an executor in the past. Older hosts are removed when the
@@ -99,6 +100,11 @@ class BlockManagerMasterEndpoint(
     mapper
   }
 
+  var blazeRpcEndpoint: AbstractBlazeRpcEndpoint = null
+  def setBlazeRpcEndpoint(endpoint: AbstractBlazeRpcEndpoint): Unit = {
+    blazeRpcEndpoint = endpoint
+  }
+
   val proactivelyReplicate = conf.get(config.STORAGE_REPLICATION_PROACTIVE)
 
   val defaultRpcTimeout = RpcUtils.askRpcTimeout(conf)
@@ -106,6 +112,61 @@ class BlockManagerMasterEndpoint(
   private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf, isDriver)
 
   logInfo("BlockManagerMasterEndpoint up")
+
+  val scheduler = Executors.newSingleThreadScheduledExecutor()
+  var aggCachedFootprint = 0.0
+  var avgAggCachedFootprint = 0.0
+  var cnt = 0
+
+
+  var loggingCnt = 0
+  val task = new Runnable {
+    def run(): Unit = {
+
+      // MB
+      var memSize = 0L
+      var diskSize = 0L
+
+      // MB
+      val unit = 1024 * 1024
+
+      val builder: mutable.StringBuilder = new mutable.StringBuilder()
+      builder.append("------- stat logging start ------\n")
+      cnt += 1
+
+      blockManagerInfo.foreach {
+        case (k: BlockManagerId, v: BlockManagerInfo) =>
+
+          var memSizeForManager = 0L
+          var diskSizeForManager = 0L
+
+          v.blocks.values.foreach {
+            stat: BlockStatus =>
+              memSizeForManager += stat.memSize
+              diskSizeForManager += stat.diskSize
+
+              memSize += stat.memSize
+              diskSize += stat.diskSize
+              aggCachedFootprint += stat.memSize
+              aggCachedFootprint += stat.diskSize
+              avgAggCachedFootprint = aggCachedFootprint / cnt
+          }
+
+          builder.append(s"BlockManager ${k.executorId}/${k.host}: " +
+            s"memory ${memSizeForManager/unit}, " +
+            s"disk ${diskSizeForManager/unit}\n")
+      }
+
+      val avg = f"%%.2f".format(avgAggCachedFootprint/unit)
+      builder.append(s"Total size memory: ${memSize/unit} MB, disk: ${diskSize/unit} MB\n" +
+        s"Avg cached data footprint $avg MB\n")
+
+      builder.append("------- stat logging end ------\n")
+
+      mylogger.info(builder.toString())
+    }
+  }
+  scheduler.scheduleAtFixedRate(task, 2, 2, TimeUnit.SECONDS)
 
   private val externalShuffleServiceRemoveShuffleEnabled: Boolean =
     externalBlockStoreClient.isDefined && conf.get(config.SHUFFLE_SERVICE_REMOVE_SHUFFLE_ENABLED)
@@ -210,6 +271,8 @@ class BlockManagerMasterEndpoint(
     case StopBlockManagerMaster =>
       context.reply(true)
       stop()
+
+    case LogString(log) => logInfo(log)
   }
 
   /**
@@ -256,6 +319,27 @@ class BlockManagerMasterEndpoint(
       }
   }
 
+  def removeZeroUtilityBlocks(stageId: Int, zeroUtilBlocks: mutable.Set[BlockId]): Unit = {
+    zeroUtilBlocks.foreach(blockId => removeBlockFromWorkers(blockId))
+
+    // Remove zero util blocks from both blockLocations
+    // and the blockManagerInfo that is tracking the blocks.
+    val blocks = blockLocations.asScala.keys.filter(blockId => zeroUtilBlocks.contains(blockId))
+    blocks.foreach { blockId =>
+      val bms: mutable.HashSet[BlockManagerId] = blockLocations.get(blockId)
+      if (bms != null) {
+        bms.foreach(bm => blockManagerInfo.get(bm)
+          .foreach(_.removeBlock(blockId)))
+
+        blockLocations.remove(blockId)
+      }
+    }
+
+    // Remove metadata for all blocks.
+    // This is called via utility-based auto unpersist.
+    blazeRpcEndpoint.removeMetadataOfBlocks(stageId, zeroUtilBlocks)
+  }
+
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
     // First remove the metadata for the given RDD, and then asynchronously remove the blocks
     // from the storage endpoints.
@@ -293,6 +377,15 @@ class BlockManagerMasterEndpoint(
         }
       }
     }
+
+    // Remove metadata for all blocks of this RDD that Blaze maintains.
+    // Applies regardless of auto unpersist option,
+    // As Blaze manages states of all cached blocks which should be cleaned up when it is removed
+    // either by user API or by Blaze.
+    // For consistency, we do it here, not as a separate step in BlazeRpcEndpoint#stageCompleted,
+    // before sending remove messages to all executors.
+    blazeRpcEndpoint.removeMetadata(Set.apply(rddId))
+
     val removeRddFromExecutorsFutures = blockManagerInfo.values.map { bmInfo =>
       bmInfo.storageEndpoint.ask[Int](removeMsg).recover {
         // use 0 as default value means no blocks were removed
@@ -400,6 +493,9 @@ class BlockManagerMasterEndpoint(
     // Remove it from blockManagerInfo and remove all the blocks.
     blockManagerInfo.remove(blockManagerId)
 
+    executorBlockManagerMap.remove(blockManagerId.executorId)
+    blazeRpcEndpoint.removeExecutor(blockManagerId.executorId)
+
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
@@ -458,7 +554,7 @@ class BlockManagerMasterEndpoint(
     try {
       val info = blockManagerInfo(blockManagerId)
 
-      val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
+      val rddBlocks = info.blocks.keySet.filter(_.isRDD)
       rddBlocks.map { blockId =>
         val currentBlockLocations = blockLocations.get(blockId)
         val maxReplicas = currentBlockLocations.size + 1
@@ -475,7 +571,7 @@ class BlockManagerMasterEndpoint(
 
   // Remove a block from the workers that have it. This can only be used to remove
   // blocks that the master knows about.
-  private def removeBlockFromWorkers(blockId: BlockId): Unit = {
+  def removeBlockFromWorkers(blockId: BlockId): Unit = {
     val locations = blockLocations.get(blockId)
     if (locations != null) {
       locations.foreach { blockManagerId: BlockManagerId =>
@@ -488,6 +584,8 @@ class BlockManagerMasterEndpoint(
             // use false as default value means no blocks were removed
             handleBlockRemovalFailure("block", blockId.toString, bm.blockManagerId, false)
           }
+          logInfo(s"[Unpersist] removeBlockFromWorkers: " +
+            s"Removed $blockId from $blockManagerId")
         }
       }
     }
@@ -503,7 +601,7 @@ class BlockManagerMasterEndpoint(
   private def storageStatus: Array[StorageStatus] = {
     blockManagerInfo.map { case (blockManagerId, info) =>
       new StorageStatus(blockManagerId, info.maxMem, Some(info.maxOnHeapMem),
-        Some(info.maxOffHeapMem), info.blocks.asScala)
+        Some(info.maxOffHeapMem), info.blocks)
     }.toArray
   }
 
@@ -553,7 +651,7 @@ class BlockManagerMasterEndpoint(
           if (askStorageEndpoints) {
             info.storageEndpoint.ask[Seq[BlockId]](getMatchingBlockIds)
           } else {
-            Future { info.blocks.asScala.keys.filter(filter).toSeq }
+            Future { info.blocks.keys.filter(filter).toSeq }
           }
         future
       }
@@ -620,6 +718,7 @@ class BlockManagerMasterEndpoint(
 
       blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(),
         maxOnHeapMemSize, maxOffHeapMemSize, storageEndpoint, externalShuffleServiceBlockStatus)
+      executorBlockManagerMap(id.executorId) = id
 
       if (pushBasedShuffleEnabled) {
         addMergerLocation(id)
@@ -706,7 +805,7 @@ class BlockManagerMasterEndpoint(
       locations = blockLocations.get(blockId)
     } else {
       locations = new mutable.HashSet[BlockManagerId]
-      blockLocations.put(blockId, locations)
+      blockLocations.putIfAbsent(blockId, locations)
     }
 
     if (storageLevel.isValid) {
@@ -833,6 +932,7 @@ class BlockManagerMasterEndpoint(
 
   override def onStop(): Unit = {
     askThreadPool.shutdownNow()
+    scheduler.shutdownNow()
   }
 }
 
@@ -883,6 +983,7 @@ private[spark] class BlockManagerInfo(
     val storageEndpoint: RpcEndpointRef,
     val externalShuffleServiceBlockStatus: Option[BlockStatusPerBlockId])
   extends Logging {
+  @transient lazy val mylogger = org.apache.log4j.LogManager.getLogger("myLogger")
 
   val maxMem = maxOnHeapMem + maxOffHeapMem
 
@@ -890,9 +991,10 @@ private[spark] class BlockManagerInfo(
   private var _remainingMem: Long = maxMem
 
   // Mapping from block id to its status.
-  private val _blocks = new JHashMap[BlockId, BlockStatus]
+  private val _blocks: concurrent.Map[BlockId, BlockStatus] =
+    new ConcurrentHashMap[BlockId, BlockStatus]().asScala
 
-  def getStatus(blockId: BlockId): Option[BlockStatus] = Option(_blocks.get(blockId))
+  def getStatus(blockId: BlockId): Option[BlockStatus] = _blocks.get(blockId)
 
   def updateLastSeenMs(): Unit = {
     _lastSeenMs = System.currentTimeMillis()
@@ -906,14 +1008,14 @@ private[spark] class BlockManagerInfo(
 
     updateLastSeenMs()
 
-    val blockExists = _blocks.containsKey(blockId)
+    val blockExists = _blocks.contains(blockId)
     var originalMemSize: Long = 0
     var originalDiskSize: Long = 0
     var originalLevel: StorageLevel = StorageLevel.NONE
 
     if (blockExists) {
       // The block exists on the storage endpoint already.
-      val blockStatus: BlockStatus = _blocks.get(blockId)
+      val blockStatus: BlockStatus = _blocks.get(blockId).get
       originalLevel = blockStatus.storageLevel
       originalMemSize = blockStatus.memSize
       originalDiskSize = blockStatus.diskSize
@@ -930,30 +1032,43 @@ private[spark] class BlockManagerInfo(
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
       var blockStatus: BlockStatus = null
-      if (storageLevel.useMemory) {
+      if (storageLevel.useMemory && storageLevel.useDisk) {
+        // it happens in promotion
+        blockStatus = BlockStatus(storageLevel, memSize = memSize, diskSize = diskSize)
+        _blocks.put(blockId, blockStatus)
+        _remainingMem -= memSize
+        if (blockExists) {
+          mylogger.info(s"Updated $blockId in memory on " +
+            s"${blockManagerId.host}:executor${blockManagerId.executorId}" +
+            s" (current size: ${Utils.bytesToString(memSize)}," +
+            s" original size: ${Utils.bytesToString(originalMemSize)}," +
+            s" free: ${Utils.bytesToString(_remainingMem)})")
+        }
+      } else if (storageLevel.useMemory) {
         blockStatus = BlockStatus(storageLevel, memSize = memSize, diskSize = 0)
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
         if (blockExists) {
-          logInfo(s"Updated $blockId in memory on ${blockManagerId.hostPort}" +
+          mylogger.info(s"Updated $blockId in memory on " +
+            s"${blockManagerId.host}:executor${blockManagerId.executorId}" +
             s" (current size: ${Utils.bytesToString(memSize)}," +
             s" original size: ${Utils.bytesToString(originalMemSize)}," +
             s" free: ${Utils.bytesToString(_remainingMem)})")
         } else {
-          logInfo(s"Added $blockId in memory on ${blockManagerId.hostPort}" +
+          mylogger.info(s"Added $blockId in memory on " +
+            s"${blockManagerId.host}:executor${blockManagerId.executorId}" +
             s" (size: ${Utils.bytesToString(memSize)}," +
             s" free: ${Utils.bytesToString(_remainingMem)})")
         }
-      }
-      if (storageLevel.useDisk) {
+      } else if (storageLevel.useDisk) {
         blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
         _blocks.put(blockId, blockStatus)
         if (blockExists) {
-          logInfo(s"Updated $blockId on disk on ${blockManagerId.hostPort}" +
+          mylogger.info(s"Updated $blockId on disk on ${blockManagerId.hostPort}" +
             s" (current size: ${Utils.bytesToString(diskSize)}," +
             s" original size: ${Utils.bytesToString(originalDiskSize)})")
         } else {
-          logInfo(s"Added $blockId on disk on ${blockManagerId.hostPort}" +
+          mylogger.info(s"Added $blockId on disk on ${blockManagerId.hostPort}" +
             s" (size: ${Utils.bytesToString(diskSize)})")
         }
       }
@@ -970,20 +1085,20 @@ private[spark] class BlockManagerInfo(
         blockStatus.remove(blockId)
       }
       if (originalLevel.useMemory) {
-        logInfo(s"Removed $blockId on ${blockManagerId.hostPort} in memory" +
+        mylogger.info(s"Removed $blockId on ${blockManagerId.hostPort} in memory" +
           s" (size: ${Utils.bytesToString(originalMemSize)}," +
           s" free: ${Utils.bytesToString(_remainingMem)})")
       }
       if (originalLevel.useDisk) {
-        logInfo(s"Removed $blockId on ${blockManagerId.hostPort} on disk" +
+        mylogger.info(s"Removed $blockId on ${blockManagerId.hostPort} on disk" +
           s" (size: ${Utils.bytesToString(originalDiskSize)})")
       }
     }
   }
 
   def removeBlock(blockId: BlockId): Unit = {
-    if (_blocks.containsKey(blockId)) {
-      _remainingMem += _blocks.get(blockId).memSize
+    if (_blocks.contains(blockId)) {
+      _remainingMem += _blocks(blockId).memSize
       _blocks.remove(blockId)
       externalShuffleServiceBlockStatus.foreach { blockStatus =>
         blockStatus.remove(blockId)
@@ -995,7 +1110,7 @@ private[spark] class BlockManagerInfo(
 
   def lastSeenMs: Long = _lastSeenMs
 
-  def blocks: JHashMap[BlockId, BlockStatus] = _blocks
+  def blocks: concurrent.Map[BlockId, BlockStatus] = _blocks
 
   override def toString: String = "BlockManagerInfo " + timeMs + " " + _remainingMem
 

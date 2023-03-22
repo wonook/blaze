@@ -19,14 +19,13 @@ package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.{Arrays, Random}
-
 import com.google.common.io.{ByteStreams, Files}
 import io.netty.channel.FileRegion
-
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.{ByteArrayWritableChannel, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
+import org.apache.spark.storage.blaze.{BlazeManager => _BlazeManager}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -48,14 +47,15 @@ class DiskStoreSuite extends SparkFunSuite {
     val blockId = BlockId("rdd_1_2")
     val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
 
+    val blazeManager = new _BlazeManager(null)
     val diskStoreMapped = new DiskStore(conf.clone().set(confKey, "0"), diskBlockManager,
-      securityManager)
+      securityManager, blazeManager, "")
     diskStoreMapped.putBytes(blockId, byteBuffer)
     val mapped = diskStoreMapped.getBytes(blockId).toByteBuffer()
     assert(diskStoreMapped.remove(blockId))
 
     val diskStoreNotMapped = new DiskStore(conf.clone().set(confKey, "1m"), diskBlockManager,
-      securityManager)
+      securityManager, blazeManager, "")
     diskStoreNotMapped.putBytes(blockId, byteBuffer)
     val notMapped = diskStoreNotMapped.getBytes(blockId).toByteBuffer()
 
@@ -78,7 +78,9 @@ class DiskStoreSuite extends SparkFunSuite {
   test("block size tracking") {
     val conf = new SparkConf()
     val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
-    val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
+    val blazeManager = new _BlazeManager(null)
+    val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf),
+      blazeManager, "")
 
     val blockId = BlockId("rdd_1_2")
     diskStore.put(blockId) { chan =>
@@ -97,7 +99,9 @@ class DiskStoreSuite extends SparkFunSuite {
     val conf = new SparkConf()
       .set(config.MEMORY_MAP_LIMIT_FOR_TESTS.key, "10k")
     val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
-    val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
+    val blazeManager = new _BlazeManager(null)
+    val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf),
+      blazeManager, "")
 
     val blockId = BlockId("rdd_1_2")
     diskStore.put(blockId) { chan =>
@@ -138,7 +142,8 @@ class DiskStoreSuite extends SparkFunSuite {
     val conf = new SparkConf()
     val securityManager = new SecurityManager(conf, Some(CryptoStreamUtils.createKey(conf)))
     val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true, isDriver = false)
-    val diskStore = new DiskStore(conf, diskBlockManager, securityManager)
+    val blazeManager = new _BlazeManager(null)
+    val diskStore = new DiskStore(conf, diskBlockManager, securityManager, blazeManager, "")
 
     val blockId = BlockId("rdd_1_2")
     diskStore.put(blockId) { chan =>

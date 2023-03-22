@@ -18,18 +18,15 @@
 package org.apache.spark.storage
 
 import java.util.Locale
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
-
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doAnswer, mock, spy, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
@@ -43,6 +40,7 @@ import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.StorageLevel._
+import org.apache.spark.storage.blaze.{BlazeManager => _BlazeManager}
 import org.apache.spark.util.Utils
 
 trait BlockManagerReplicationBehavior extends SparkFunSuite
@@ -78,7 +76,8 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memManager = memoryManager.getOrElse(UnifiedMemoryManager(conf, numCores = 1))
     val serializerManager = new SerializerManager(serializer, conf)
-    val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,
+    val blazeManager = new _BlazeManager(null)
+    val store = new BlockManager(name, rpcEnv, master, blazeManager, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, None)
     memManager.setMemoryStore(store.memoryStore)
     store.initialize("app-id")
@@ -240,7 +239,9 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     conf.set(TEST_MEMORY, 10000L)
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
-    val failableStore = new BlockManager("failable-store", rpcEnv, master, serializerManager, conf,
+    val blazeManager = new _BlazeManager(null)
+    val failableStore = new BlockManager("failable-store", rpcEnv, master,
+      blazeManager, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, None)
     memManager.setMemoryStore(failableStore.memoryStore)
     failableStore.initialize("app-id")

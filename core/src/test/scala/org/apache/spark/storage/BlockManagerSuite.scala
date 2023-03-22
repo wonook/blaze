@@ -17,10 +17,9 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, IOException}
+import java.io.{File, IOException, InputStream}
 import java.nio.ByteBuffer
 import java.nio.file.Files
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -28,7 +27,6 @@ import scala.concurrent.{Future, TimeoutException}
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
-
 import com.esotericsoftware.kryo.KryoException
 import org.apache.commons.lang3.RandomUtils
 import org.mockito.{ArgumentCaptor, ArgumentMatchers => mc}
@@ -38,7 +36,6 @@ import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
-
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
@@ -63,6 +60,7 @@ import org.apache.spark.serializer.{DeserializationStream, JavaSerializer, KryoD
 import org.apache.spark.shuffle.{MigratableResolver, ShuffleBlockInfo, ShuffleBlockResolver, ShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.storage.blaze.{BlazeManager => _BlazeManager}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -141,7 +139,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     } else {
       None
     }
-    val blockManager = new BlockManager(name, rpcEnv, master, serializerManager, bmConf,
+    val blazeManager = new _BlazeManager(null)
+    val blockManager = new BlockManager(name, rpcEnv, master,
+      blazeManager, serializerManager, bmConf,
       memManager, mapOutputTracker, shuffleManager, transfer, bmSecurityMgr, externalShuffleClient)
     memManager.setMemoryStore(blockManager.memoryStore)
     allStores += blockManager
@@ -1306,8 +1306,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
+    val blazeManager = new _BlazeManager(null)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
-      serializerManager, conf, memoryManager, mapOutputTracker,
+      blazeManager, serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
     allStores += store
     store.initialize("app-id")
@@ -1355,8 +1356,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       val transfer =
         new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
       val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
+      val blazeManager = new _BlazeManager(null)
       val blockManager = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
-        serializerManager, conf, memoryManager, mapOutputTracker,
+        blazeManager, serializerManager, conf, memoryManager, mapOutputTracker,
         shuffleManager, transfer, securityMgr, None)
       try {
         blockManager.initialize("app-id")
@@ -2191,8 +2193,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val blazeManager = new _BlazeManager(null)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
-      serializerManager, conf, memoryManager, mapOutputTracker,
+      blazeManager, serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
     allStores += store
     store.initialize("app-id")
@@ -2213,8 +2216,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", "localhost", 0, 1)
     val memoryManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(kryoSerializerWithDiskCorruptedInputStream, conf)
+    val blazeManager = new _BlazeManager(null)
     val store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
-      serializerManager, conf, memoryManager, mapOutputTracker,
+      blazeManager, serializerManager, conf, memoryManager, mapOutputTracker,
       shuffleManager, transfer, securityMgr, None)
     allStores += store
     store.initialize("app-id")
@@ -2354,7 +2358,7 @@ private object BlockManagerSuite {
         blockId: BlockId,
         data: () => Either[Array[Any], ChunkedByteBuffer]): Unit = {
       store.blockInfoManager.lockForWriting(blockId).foreach { info =>
-        val newEffectiveStorageLevel = store.dropFromMemory(blockId, data)
+        val newEffectiveStorageLevel = store.dropFromMemory(blockId, false, data)
         if (newEffectiveStorageLevel.isValid) {
           // The block is still present in at least one store, so release the lock
           // but don't delete the block info

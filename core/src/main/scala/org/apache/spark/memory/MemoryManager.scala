@@ -19,9 +19,7 @@ package org.apache.spark.memory
 
 import java.lang.management.{ManagementFactory, PlatformManagedObject}
 import javax.annotation.concurrent.GuardedBy
-
 import scala.util.Try
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
@@ -107,6 +105,10 @@ private[spark] abstract class MemoryManager(
    * @return whether all N bytes were successfully granted.
    */
   def acquireUnrollMemory(blockId: BlockId, numBytes: Long, memoryMode: MemoryMode): Boolean
+
+  def enoughMemory(numBytes: Long, memoryMode: MemoryMode): Boolean = synchronized {
+    true
+  }
 
   /**
    * Try to acquire up to `numBytes` of execution memory for the current task and return the

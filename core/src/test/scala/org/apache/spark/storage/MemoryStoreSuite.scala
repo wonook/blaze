@@ -18,17 +18,15 @@
 package org.apache.spark.storage
 
 import java.nio.ByteBuffer
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
-
 import org.scalatest._
-
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
 import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
+import org.apache.spark.storage.blaze.{BlazeManager => _BlazeManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
@@ -94,13 +92,16 @@ class MemoryStoreSuite
     val blockEvictionHandler = new BlockEvictionHandler {
       override private[storage] def dropFromMemory[T: ClassTag](
           blockId: BlockId,
+          spillToDisk: Boolean,
           data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
         memoryStore.remove(blockId)
         StorageLevel.NONE
       }
     }
+    val blazeManager = new _BlazeManager(null)
     memoryStore =
-      new MemoryStore(conf, blockInfoManager, serializerManager, memManager, blockEvictionHandler)
+      new MemoryStore(conf, blockInfoManager, serializerManager, memManager, blockEvictionHandler,
+        blazeManager, "")
     memManager.setMemoryStore(memoryStore)
     (memoryStore, blockInfoManager)
   }
@@ -468,6 +469,7 @@ class MemoryStoreSuite
 
         override private[storage] def dropFromMemory[T: ClassTag](
             blockId: BlockId,
+            spillToDisk: Boolean,
             data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
           if (droppedSoFar < numValidBlocks) {
             droppedSoFar += 1
@@ -484,8 +486,9 @@ class MemoryStoreSuite
           }
         }
       }
+      val blazeManager = new _BlazeManager(null)
       memoryStore = new MemoryStore(conf, blockInfoManager, serializerManager, memManager,
-          blockEvictionHandler) {
+          blockEvictionHandler, blazeManager, "") {
         override def afterDropAction(blockId: BlockId): Unit = {
           if (readLockAfterDrop) {
             // pretend that we get a read lock on the block (now on disk) in another thread

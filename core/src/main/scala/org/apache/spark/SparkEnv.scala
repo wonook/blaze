@@ -20,20 +20,17 @@ package org.apache.spark
 import java.io.File
 import java.net.Socket
 import java.util.Locale
-
 import scala.collection.JavaConverters._
 import scala.collection.concurrent
 import scala.collection.mutable
 import scala.util.Properties
-
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorBackend
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.internal.config._
 import org.apache.spark.memory.{MemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
@@ -45,7 +42,8 @@ import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinato
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
-import org.apache.spark.storage._
+import org.apache.spark.storage.{BlazeManager, _}
+import org.apache.spark.storage.blaze.{AbstractBlazeRpcEndpoint, BlazeManager, BlazeMetricTracker, BlazeParameters, BlazeRpcEndpoint, CachingPolicy, CostAnalyzer, EvictionPolicy, RDDJobDag}
 import org.apache.spark.util.{RpcUtils, Utils}
 
 /**
@@ -335,27 +333,53 @@ object SparkEnv extends Logging {
 
     // Mapping from block manager id to the block manager's information.
     val blockManagerInfo = new concurrent.TrieMap[BlockManagerId, BlockManagerInfo]()
+    val blockManagerMasterEndpoint =
+      new BlockManagerMasterEndpoint(
+        rpcEnv,
+        isLocal,
+        conf,
+        listenerBus,
+        if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
+          externalShuffleClient
+        } else {
+          None
+        }, blockManagerInfo,
+        mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
+        shuffleManager,
+        isDriver)
+
     val blockManagerMaster = new BlockManagerMaster(
       registerOrLookupEndpoint(
-        BlockManagerMaster.DRIVER_ENDPOINT_NAME,
-        new BlockManagerMasterEndpoint(
-          rpcEnv,
-          isLocal,
-          conf,
-          listenerBus,
-          if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-            externalShuffleClient
-          } else {
-            None
-          }, blockManagerInfo,
-          mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
-          shuffleManager,
-          isDriver)),
+        BlockManagerMaster.DRIVER_ENDPOINT_NAME, blockManagerMasterEndpoint),
       registerOrLookupEndpoint(
         BlockManagerMaster.DRIVER_HEARTBEAT_ENDPOINT_NAME,
         new BlockManagerMasterHeartbeatEndpoint(rpcEnv, isLocal, blockManagerInfo)),
       conf,
       isDriver)
+
+    val metricTracker: BlazeMetricTracker = new BlazeMetricTracker
+    val dagPath = conf.get(BlazeParameters.DAG_PATH)
+    var rddJobDag: Option[RDDJobDag] = Option.empty
+
+    var blazeRpcEndpoint: AbstractBlazeRpcEndpoint = null
+
+    // Initialize blazeBlockManagerEndpoint,
+    // which is used for creating blazeManager
+    if (isDriver) {
+      rddJobDag = RDDJobDag(dagPath, conf, metricTracker)
+      val costAnalyzer: CostAnalyzer =
+        CostAnalyzer(conf.get(BlazeParameters.COST_FUNCTION), rddJobDag, metricTracker)
+      val cachingPolicy: CachingPolicy = CachingPolicy()
+      val evictionPolicy = EvictionPolicy(costAnalyzer)
+
+      blazeRpcEndpoint =
+        new BlazeRpcEndpoint(rpcEnv, isLocal, conf,
+          blockManagerMasterEndpoint, costAnalyzer,
+          metricTracker, cachingPolicy, evictionPolicy, rddJobDag)
+    }
+
+    val blazeManager = new BlazeManager(registerOrLookupEndpoint(
+      BlazeManager.DRIVER_ENDPOINT_NAME, blazeRpcEndpoint))
 
     val blockTransferService =
       new NettyBlockTransferService(conf, securityManager, bindAddress, advertiseAddress,
@@ -366,6 +390,7 @@ object SparkEnv extends Logging {
       executorId,
       rpcEnv,
       blockManagerMaster,
+      blazeManager,
       serializerManager,
       conf,
       memoryManager,

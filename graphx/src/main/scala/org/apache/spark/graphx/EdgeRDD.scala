@@ -19,16 +19,12 @@ package org.apache.spark.graphx
 
 import scala.language.existentials
 import scala.reflect.ClassTag
-
-import org.apache.spark.Dependency
-import org.apache.spark.Partition
-import org.apache.spark.SparkContext
-import org.apache.spark.TaskContext
+import org.apache.spark.{Dependency, Partition, SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.graphx.impl.EdgePartition
 import org.apache.spark.graphx.impl.EdgePartitionBuilder
 import org.apache.spark.graphx.impl.EdgeRDDImpl
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**
  * `EdgeRDD[ED, VD]` extends `RDD[Edge[ED]]` by storing the edges in columnar format on each
@@ -47,12 +43,27 @@ abstract class EdgeRDD[ED](
   override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
 
   override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
-    val p = firstParent[(PartitionID, EdgePartition[ED, _])].iterator(part, context)
-    if (p.hasNext) {
-      p.next()._2.iterator.map(_.copy())
+    val parentCompStart = System.currentTimeMillis()
+    val parentIter = firstParent[(PartitionID, EdgePartition[ED, _])].iterator(part, context)
+    val parentCompTime = System.currentTimeMillis() - parentCompStart
+
+    val st = System.currentTimeMillis()
+
+    val result = if (parentIter.hasNext) {
+      parentIter.next()._2.iterator.map(_.copy())
     } else {
       Iterator.empty
     }
+
+    val compTime = System.currentTimeMillis() - st
+
+    val parentBlockId = RDDBlockId(firstParent[(PartitionID, EdgePartition[ED, _])].id, part.index)
+    val thisBlockId = RDDBlockId(id, part.index)
+    val key = s"${parentBlockId.name}-${thisBlockId.name}"
+    val totalCompTime = parentCompTime + compTime
+    SparkEnv.get.blockManager.blazeManager.sendCompTime(thisBlockId, key, totalCompTime)
+
+    result
   }
 
   /**
