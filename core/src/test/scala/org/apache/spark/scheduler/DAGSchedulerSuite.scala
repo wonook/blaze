@@ -332,7 +332,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       shuffleMergeFinalize: Boolean = true,
       shuffleMergeRegister: Boolean = true
   ) extends DAGScheduler(
-      sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster, env, clock) {
+      sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster,
+    env.rddJobDag, env.blazeRpcEndpoint, env, clock) {
     /**
      * Schedules shuffle merge finalize.
      */
@@ -872,6 +873,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
+      sc.env.rddJobDag,
+      sc.env.blazeRpcEndpoint,
       sc.env)
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(noKillScheduler)
     val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
