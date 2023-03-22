@@ -100,7 +100,7 @@ private[spark] class IndexShuffleBlockResolver(
     dirs
       .map(d =>
         new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, blockId.name)))
-      .getOrElse(blockManager.diskBlockManager.getFile(blockId))
+      .getOrElse(blockManager.diskBlockManager.getShuffleFile(blockId))
   }
 
   /**
@@ -117,7 +117,7 @@ private[spark] class IndexShuffleBlockResolver(
     dirs
       .map(d =>
         new File(ExecutorDiskUtils.getFilePath(d, blockManager.subDirsPerLocalDir, blockId.name)))
-      .getOrElse(blockManager.diskBlockManager.getFile(blockId))
+      .getOrElse(blockManager.diskBlockManager.getShuffleFile(blockId))
   }
 
   private def getMergedBlockDataFile(

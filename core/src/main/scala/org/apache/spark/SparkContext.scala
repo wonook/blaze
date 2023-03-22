@@ -23,15 +23,13 @@ import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 import javax.ws.rs.core.UriBuilder
-
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.immutable
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
-
 import com.google.common.collect.MapMaker
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -40,7 +38,6 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.logging.log4j.Level
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
@@ -68,6 +65,7 @@ import org.apache.spark.status.{AppStatusSource, AppStatusStore}
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
+import org.apache.spark.storage.blaze.BlazeParameters
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
 import org.apache.spark.util.logging.DriverLogger
@@ -82,6 +80,7 @@ import org.apache.spark.util.logging.DriverLogger
  *   this config overrides the default configs as well as system properties.
  */
 class SparkContext(config: SparkConf) extends Logging {
+  private val costFunc = config.get(BlazeParameters.COST_FUNCTION)
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -193,6 +192,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
+  private val startJCT = System.currentTimeMillis()
 
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
@@ -1926,7 +1926,8 @@ class SparkContext(config: SparkConf) extends Logging {
    * Register an RDD to be persisted in memory and/or disk storage
    */
   private[spark] def persistRDD(rdd: RDD[_]): Unit = {
-    persistentRdds(rdd.id) = rdd
+//    persistentRdds(rdd.id) = rdd
+    logInfo(s"Persisted RDD ${rdd.id}")
   }
 
   /**
@@ -1934,8 +1935,9 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   private[spark] def unpersistRDD(rddId: Int, blocking: Boolean): Unit = {
     env.blockManager.master.removeRdd(rddId, blocking)
-    persistentRdds.remove(rddId)
+//    persistentRdds.remove(rddId)
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
+    logInfo(s"Unpersisted RDD $rddId")
   }
 
   /**
@@ -2161,6 +2163,8 @@ class SparkContext(config: SparkConf) extends Logging {
     // Unset YARN mode system env variable, to allow switching between cluster types.
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
+    val jct = System.currentTimeMillis() - startJCT
+    logInfo(s"\n\n$costFunc JCT: $jct ms\n\n")
   }
 
 

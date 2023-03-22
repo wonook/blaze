@@ -64,6 +64,9 @@ class SparkEnv (
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
     val blockManager: BlockManager,
+    val blazeRpcEndpoint: AbstractBlazeRpcEndpoint,
+    val rddJobDag: Option[RDDJobDag],
+    val metricTracker: BlazeMetricTracker,
     val securityManager: SecurityManager,
     val metricsSystem: MetricsSystem,
     val memoryManager: MemoryManager,
@@ -357,6 +360,8 @@ object SparkEnv extends Logging {
       conf,
       isDriver)
 
+    /* Variables for Blaze */
+
     val metricTracker: BlazeMetricTracker = new BlazeMetricTracker
     val dagPath = conf.get(BlazeParameters.DAG_PATH)
     var rddJobDag: Option[RDDJobDag] = Option.empty
@@ -432,6 +437,9 @@ object SparkEnv extends Logging {
       shuffleManager,
       broadcastManager,
       blockManager,
+      blazeRpcEndpoint,
+      rddJobDag,
+      metricTracker,
       securityManager,
       metricsSystem,
       memoryManager,

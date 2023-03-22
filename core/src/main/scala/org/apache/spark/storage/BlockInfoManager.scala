@@ -204,6 +204,14 @@ private[storage] class BlockInfoManager extends Logging {
       blockId: BlockId,
       blocking: Boolean)(
       f: BlockInfo => Boolean): Option[BlockInfo] = {
+    var printedLog = false
+
+    val st = System.currentTimeMillis()
+    if (!printedLog && blocking) {
+      logInfo(s"Task $currentTaskAttemptId start waiting for write lock for $blockId ")
+      printedLog = true
+    }
+
     var done = false
     var result: Option[BlockInfo] = None
     while(!done) {
@@ -221,6 +229,11 @@ private[storage] class BlockInfoManager extends Logging {
             condition.await()
           }
         }
+      }
+      if (blocking) {
+        val waitedTime = System.currentTimeMillis() - st
+        logInfo(s"Task $currentTaskAttemptId finished waiting after $waitedTime " +
+          s"for write lock for $blockId")
       }
     }
     result
@@ -288,6 +301,8 @@ private[storage] class BlockInfoManager extends Logging {
   def lockForWriting(
       blockId: BlockId,
       blocking: Boolean = true): Option[BlockInfo] = {
+    var writerTask = -1L
+    var readerCount = -1
     val taskAttemptId = currentTaskAttemptId
     logTrace(s"Task $taskAttemptId trying to acquire write lock for $blockId")
     acquireLock(blockId, blocking) { info =>
@@ -295,7 +310,12 @@ private[storage] class BlockInfoManager extends Logging {
       if (acquire) {
         info.writerTask = taskAttemptId
         writeLocksByTask.get(taskAttemptId).add(blockId)
-        logTrace(s"Task $taskAttemptId acquired write lock for $blockId")
+        logInfo(s"Task $taskAttemptId acquired write lock for $blockId")
+      } else {
+        writerTask = info.writerTask
+        readerCount = info.readerCount
+        logInfo(s"Task $currentTaskAttemptId failed to acquire write lock for $blockId "
+          + s"current writerTask $writerTask readerCount $readerCount")
       }
       acquire
     }
