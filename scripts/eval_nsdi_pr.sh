@@ -23,7 +23,7 @@ DAG_PATH=None
 ITER=10
 
 CLASS=com.ibm.crail.benchmarks.Main
-JAR="/home/jyeo/sql-benchmarks/target/sql-benchmarks-1.0.jar"
+JAR="/home/wonook/sql-benchmarks/target/sql-benchmarks-1.0.jar"
 #ARGS="-t pagerank -gi 10 -i /user/ubuntu/data/graphx/twitter"
 ARGS="-t pagerank -gi 10 -i /twitter"
 #ARGS="-t pagerank -gi 10 -i /followers.txt"

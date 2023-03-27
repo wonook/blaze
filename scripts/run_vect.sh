@@ -19,7 +19,7 @@ touch $DIR/time_mem_use.txt
 --master yarn --class org.apache.spark.examples.ml.VectorIndexerExample \
 --conf "spark.driver.memory=4g" \
 --conf "spark.driver.cores=6" \
-/home/jyeo/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar \
+/home/wonook/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar \
 kdd12part00 2 \
 2>&1 | tee $DIR/log.txt
 

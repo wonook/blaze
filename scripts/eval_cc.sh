@@ -10,7 +10,7 @@ DAG_PATH=None
 MEM_OVERHEAD=4g
 
 CLASS=org.apache.spark.examples.graphx.ConnectedComponentsExample
-JAR=/home/jyeo/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
+JAR=/home/wonook/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
 ARGS="/8m-small-vertex-graph.txt"
 
 SLACK=0

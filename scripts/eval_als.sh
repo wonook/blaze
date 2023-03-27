@@ -2,7 +2,7 @@
 
 APPNAME=ALSExample
 APPCLASS=org.apache.spark.examples.ml.ALSExample
-APPJAR=/home/jyeo/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
+APPJAR=/home/wonook/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
 ARGS="none"
 
 PACKAGES=com.microsoft.ml.spark:mmlspark_2.11:1.0.0-rc1
@@ -16,7 +16,7 @@ STORING_POLICY=Default
 CACHING_POLICY=None
 AUTOCACHING=true
 EVICT_POLICY=DRDD
-DAG_PATH=/home/jyeo/spark/als_log.txt
+DAG_PATH=/home/wonook/spark/als_log.txt
 
 ./ours.sh $APPNAME $APPCLASS $APPJAR $ARGS \
 $PACKAGES $EXECUTORS $EXECUTOR_MEM_SIZE $DISAGG_MEM_SIZE $FRACTION \

@@ -54,11 +54,11 @@ elif 'XGBOOST' in name:
 
 
 if 'PR' in name:
-    jar = '/home/jyeo/sql-benchmarks/target/sql-benchmarks-1.0.jar'
+    jar = '/home/wonook/sql-benchmarks/target/sql-benchmarks-1.0.jar'
 elif 'CC' or 'SVDPP' in name:
-    jar = '/home/jyeo/blaze/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar'
+    jar = '/home/wonook/blaze/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar'
 else:
-    jar = '/home/jyeo/HiBench/sparkbench/assembly/target/sparkbench-assembly-8.0-SNAPSHOT-dist.jar'
+    jar = '/home/wonook/HiBench/sparkbench/assembly/target/sparkbench-assembly-8.0-SNAPSHOT-dist.jar'
 
 
 print(class_args)
@@ -73,7 +73,7 @@ disk = '0g'
 #hdfs dfs -rm -R /HiBench/$TEST_NAME/Output
 
 
-script = f'/home/jyeo/blaze/run_atc21.sh {name} {exp_type} {executor_mem} {num_executors} {disk} {dag_path} {class_name} {jar} {promote} {profile_timeout} {class_args}'
+script = f'/home/wonook/blaze/run_atc21.sh {name} {exp_type} {executor_mem} {num_executors} {disk} {dag_path} {class_name} {jar} {promote} {profile_timeout} {class_args}'
 
 print(script)
 

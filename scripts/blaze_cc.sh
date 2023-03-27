@@ -7,9 +7,9 @@ DAG_PATH=None
 
 
 CLASS=org.apache.spark.examples.graphx.ConnectedComponentsExample
-JAR=/home/jyeo/spark/examples/target/scala-2.12/jars/spark-examples_2.12-3.0.0.jar
-#JAR=/home/jyeo/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
-ARGS="/user/jyeo/data/graphx/twitter"
+JAR=/home/wonook/spark/examples/target/scala-2.12/jars/spark-examples_2.12-3.0.0.jar
+#JAR=/home/wonook/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
+ARGS="/user/wonook/data/graphx/twitter"
 
 MEM_OVERHEAD=4g
 

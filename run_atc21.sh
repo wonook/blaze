@@ -20,7 +20,7 @@ ITER="${12}"
 COST="${13}"
 ARGS="${@:14}"
 
-HOME_DIR=/home/jyeo
+HOME_DIR=/home/wonook
 
 echo $SAMPLING_TIMEOUT
 echo $ARGS

@@ -249,14 +249,14 @@ parallel-ssh -h ~/crail-hosts.txt 'sudo rm -rf /dev/hugepages/data/*'
 parallel-ssh -h ~/compute-hosts.txt 'sudo rm -rf /dev/hugepages/cache/*'
 parallel-ssh -h ~/compute-hosts.txt 'sudo rm -rf /dev/hugepages/data/*' 
 
-parallel-ssh -h ~/compute-hosts.txt 'rm -rf /home/jyeo/spark_cache/*'
-parallel-ssh -h ~/compute-hosts.txt 'rm -rf /home/jyeo/spark_cache/data/*'
+parallel-ssh -h ~/compute-hosts.txt 'rm -rf /home/wonook/spark_cache/*'
+parallel-ssh -h ~/compute-hosts.txt 'rm -rf /home/wonook/spark_cache/data/*'
 
 stop-crail.sh
 
 echo "Stopped crail..."
 
-#parallel-ssh -h ~/compute-hosts.txt 'sudo rm -rf /home/jyeo/xvdc/yarn/*'
+#parallel-ssh -h ~/compute-hosts.txt 'sudo rm -rf /home/wonook/xvdc/yarn/*'
 
 
 # recompile crail 
@@ -325,10 +325,10 @@ if [[ $TEST_NAME == *"LGR"* ]]; then
 --master yarn --class $CLASS \
 --conf "spark.yarn.am.memory=4000m" \
 --conf "spark.yarn.am.cores=2" \
---conf "spark.driver.extraClassPath=/home/jyeo/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+--conf "spark.driver.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
 --conf "spark.driver.memory=32000m" \
 --conf "spark.driver.cores=6" \
---conf "spark.executor.extraClassPath=/home/jyeo/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+--conf "spark.executor.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
 --conf "spark.rpc.lookupTimeout=300s" \
 --conf "spark.memory.memoryManager=Unified" \
 --conf "spark.disagg.threshold=$DISAGG_THRESHOLD" \
@@ -348,10 +348,10 @@ else
 --master yarn --class $CLASS \
 --conf "spark.yarn.am.memory=4000m" \
 --conf "spark.yarn.am.cores=2" \
---conf "spark.driver.extraClassPath=/home/jyeo/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+--conf "spark.driver.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
 --conf "spark.driver.memory=32000m" \
 --conf "spark.driver.cores=6" \
---conf "spark.executor.extraClassPath=/home/jyeo/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+--conf "spark.executor.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
 --conf "spark.rpc.lookupTimeout=300s" \
 --conf "spark.memory.memoryManager=Unified" \
 --conf "spark.disagg.threshold=$DISAGG_THRESHOLD" \
@@ -422,7 +422,7 @@ fi
 start_time="$(date -u +%s)"
 
 echo "start iostat"
-nohup /home/jyeo/run_iostat.sh > /dev/null 2>&1 &
+nohup /home/wonook/run_iostat.sh > /dev/null 2>&1 &
 
 echo "start iostat anna4"
 ssh anna-04 "nohup ./run_iostat.sh > /dev/null 2>&1 &"
@@ -434,13 +434,13 @@ if [[ $TEST_NAME == *"LGR"* ]]; then
 	--master yarn --class $CLASS \
 	--conf "spark.yarn.am.memory=4000m" \
 	--conf "spark.yarn.am.cores=2" \
-	--conf "spark.driver.extraClassPath=/home/jyeo/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+	--conf "spark.driver.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
 	--conf "spark.driver.memory=48000m" \
 	--conf "spark.driver.cores=8" \
-	--conf "spark.executor.extraClassPath=/home/jyeo/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+	--conf "spark.executor.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
 	--conf "spark.rpc.lookupTimeout=300s" \
 	--conf "spark.memory.memoryManager=$MEMORY_MANAGER" \
-	--conf "spark.caching.dir=/home/jyeo/spark_cache" \
+	--conf "spark.caching.dir=/home/wonook/spark_cache" \
     --conf "spark.disagg.cachingpolicy=$CACHING_POLICY" \
 	--conf "spark.disagg.threshold=$DISAGG_THRESHOLD" \
 	--conf "spark.memory.fraction=$MEM_FRACTION" \
@@ -473,13 +473,13 @@ else
 	--master yarn --class $CLASS \
 	--conf "spark.yarn.am.memory=4000m" \
 	--conf "spark.yarn.am.cores=2" \
-	--conf "spark.driver.extraClassPath=/home/jyeo/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+	--conf "spark.driver.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
 	--conf "spark.driver.memory=50000m" \
 	--conf "spark.driver.cores=8" \
-	--conf "spark.executor.extraClassPath=/home/jyeo/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+	--conf "spark.executor.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
 	--conf "spark.rpc.lookupTimeout=300s" \
 	--conf "spark.memory.memoryManager=$MEMORY_MANAGER" \
-	--conf "spark.caching.dir=/home/jyeo/spark_cache" \
+	--conf "spark.caching.dir=/home/wonook/spark_cache" \
     --conf "spark.disagg.cachingpolicy=$CACHING_POLICY" \
 	--conf "spark.disagg.threshold=$DISAGG_THRESHOLD" \
 	--conf "spark.memory.fraction=$MEM_FRACTION" \
@@ -514,7 +514,7 @@ pkill iostat
 
 cp anna3-iostat_log.txt $DIR/
 python3 disk_time_range.py anna3-iostat_log.txt > $DIR/anna3-disk.txt
-scp anna-04:/home/jyeo/anna4-iostat_log.txt $DIR/
+scp anna-04:/home/wonook/anna4-iostat_log.txt $DIR/
 python3 disk_time_range.py $DIR/anna4-iostat_log.txt > $DIR/anna4-disk.txt
 
 mv sampled_lineage.txt $DIR/

@@ -2,10 +2,10 @@ hdfs dfs -rm -R /terasort-output
 #~/incubator-crail/bin/stop-crail.sh
 #~/incubator-crail/bin/start-crail.sh
 
-parallel-ssh -h ./compute-hosts.txt 'echo splab_jyeo | sudo -S rm -rf /dev/hugepages/cache/*'
-parallel-ssh -h ./compute-hosts.txt 'echo splab_jyeo | sudo -S rm -rf /dev/hugepages/data/*'
+parallel-ssh -h ./compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /dev/hugepages/cache/*'
+parallel-ssh -h ./compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /dev/hugepages/data/*'
 
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_jyeo | sudo -S rm -rf /disagg/ssd0/yarn/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /disagg/ssd0/yarn/*'
 
 ./bin/spark-submit -v \
 --num-executors 36 --executor-cores 4 --executor-memory 16G --driver-memory 16G \

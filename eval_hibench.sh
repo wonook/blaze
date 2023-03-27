@@ -6,7 +6,7 @@ DAG_PATH=None
 SAMPLING_TIMEOUT=60
 ITER=None
 
-JAR=/home/jyeo/HiBench/sparkbench/assembly/target/sparkbench-assembly-8.0-SNAPSHOT-dist.jar
+JAR=/home/wonook/HiBench/sparkbench/assembly/target/sparkbench-assembly-8.0-SNAPSHOT-dist.jar
 
 if [ "$TEST_NAME" == "KMeans" ]; then
 

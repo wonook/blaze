@@ -21,7 +21,7 @@ touch $DIR/time_mem_use.txt
 --conf "spark.driver.memory=4g" \
 --conf "spark.driver.cores=6" \
 --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \
-/home/jyeo/experiments_nemo/spark_apps/target/scala-2.11/sparkeval_2.11-1.0.jar \
+/home/wonook/experiments_nemo/spark_apps/target/scala-2.11/sparkeval_2.11-1.0.jar \
 avazu-app \
 2>&1 | tee $DIR/log.txt
 

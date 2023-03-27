@@ -9,9 +9,9 @@ SAMPLING_TIMEOUT=60
 SAMPLING_JOBS=1
 
 #CLASS=org.apache.spark.examples.graphx.PageRankExample
-#JAR=/home/jyeo/blaze/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
+#JAR=/home/wonook/blaze/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
 CLASS=com.ibm.crail.benchmarks.Main
-JAR=/home/jyeo/sql-benchmarks/target/sql-benchmarks-1.0.jar
+JAR=/home/wonook/sql-benchmarks/target/sql-benchmarks-1.0.jar
 ARGS="-t pagerank -gi 10 -i /twitter_5g"
 ITER=10
 COST="Recomp"

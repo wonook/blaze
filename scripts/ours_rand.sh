@@ -18,10 +18,10 @@ DAG_PATH=${15}
 
 # Restart Crail
 
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_jyeo | sudo -S rm -rf /dev/hugepages/cache/*'
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_jyeo | sudo -S rm -rf /dev/hugepages/data/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /dev/hugepages/cache/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /dev/hugepages/data/*'
 
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_jyeo | sudo -S rm -rf /disagg/ssd0/yarn/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /disagg/ssd0/yarn/*'
 
 stop-crail.sh && start-crail.sh
 sleep 5
