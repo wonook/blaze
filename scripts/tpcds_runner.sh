@@ -11,7 +11,7 @@ DISAGG=0g
 # cleanup 
 parallel-ssh -h ~/compute-hosts.txt 'rm -rf /dev/hugepages/cache/*'
 parallel-ssh -h ~/compute-hosts.txt 'rm -rf /dev/hugepages/data/*' 
-parallel-ssh -h ~/compute-hosts.txt 'rm -rf /home/wonook/xvdb/yarn/*'
+parallel-ssh -h ~/compute-hosts.txt 'rm -rf /home/ubuntu/xvdb/yarn/*'
 
 # restart crail 
 if [ "$SYSTEM" != "Spark" ]; then
@@ -39,8 +39,8 @@ hdfs dfs -rm -R /tpcds-output-spark
 ./bin/spark-submit -v \
 	--num-executors $EXECUTORS --executor-cores $CORES --executor-memory $MEM --driver-memory 8g --master yarn \
 	--conf "spark.app.name=tpcds-$QUERY" \
-	--conf "spark.driver.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:." \
-	--conf "spark.executor.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:." \
+	--conf "spark.driver.extraClassPath=/home/ubuntu/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:." \
+	--conf "spark.executor.extraClassPath=/home/ubuntu/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:." \
     --conf "spark.sql.adaptive.enabled=$AQE" \
     --conf "spark.sql.autoBroadcastJoinThreshold=$BJ_SIZE" \
 	--class com.ibm.crail.benchmarks.Main \
@@ -51,8 +51,8 @@ else
 ./bin/spark-submit -v \
 	--num-executors $EXECUTORS --executor-cores $CORES --executor-memory $MEM --driver-memory 8g --master yarn \
 	--conf "spark.app.name=tpcds-$QUERY" \
-	--conf "spark.driver.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
-	--conf "spark.executor.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+	--conf "spark.driver.extraClassPath=/home/ubuntu/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
+	--conf "spark.executor.extraClassPath=/home/ubuntu/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:." \
 	--conf "spark.disagg.evictpolicy=DRDD" \
 	--conf "spark.disagg.autocaching=true" \
 	--conf "spark.disagg.threshold=$DISAGG" \

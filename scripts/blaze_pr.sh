@@ -7,8 +7,8 @@ DAG_PATH=None
 
 
 CLASS=com.ibm.crail.benchmarks.Main
-JAR=/home/wonook/sql-benchmarks/target/sql-benchmarks-1.0.jar
-ARGS="-t pagerank -gi 10 -i /user/wonook/data/graphx/twitter"
+JAR=/home/ubuntu/blaze_benchmarks/sql-benchmarks/target/sql-benchmarks-1.0.jar
+ARGS="-t pagerank -gi 10 -i /user/ubuntu/data/graphx/twitter"
 
 MEM_OVERHEAD=3g
 

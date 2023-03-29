@@ -18,10 +18,10 @@ branch=`git rev-parse --abbrev-ref HEAD`
 echo "current branch $branch"
 echo "test type $TEST_TYPE"
 
-parallel-ssh -i -h /home/wonook/compute-hosts.txt 'rm -rf /home/wonook/spark_cache/*'	
+parallel-ssh -i -h /home/ubuntu/compute-hosts.txt 'rm -rf /home/ubuntu/blaze_cache/*'	
 
 echo "Remove spark shuffle dir"
-parallel-ssh -i -h /home/wonook/compute-hosts.txt 'rm -rf /home/wonook/spark_shuffle/*'	
+parallel-ssh -i -h /home/ubuntu/compute-hosts.txt 'rm -rf /home/ubuntu/blaze_shuffle/*'	
 
 
 # system args
@@ -72,8 +72,8 @@ exit 125
 
 fi
 
-parallel-ssh -h ~/compute-hosts.txt 'sudo rm -rf /home/wonook/spark_cache/*'
-parallel-ssh -h ~/compute-hosts.txt 'sudo rm -rf /home/wonook/spark_cache/data/*'
+parallel-ssh -h ~/compute-hosts.txt 'sudo rm -rf /home/ubuntu/blaze_cache/*'
+parallel-ssh -h ~/compute-hosts.txt 'sudo rm -rf /home/ubuntu/blaze_cache/data/*'
 
 CORES=14
 NODES=10
@@ -119,8 +119,8 @@ rm killed.txt
 
 sampling_killer.sh $SAMPLING_TIMEOUT &
 
-#--conf "spark.driver.extraClassPath=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:/home/wonook/hadoop/share/hadoop/common/lib/hadoop-aws-2.7.2.jar:/home/wonook/hadoop/share/hadoop/common/lib/aws-java-sdk-1.7.4.jar" \
-#EXTRA_PATH=/home/wonook/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:/home/wonook/hadoop/share/hadoop/common/lib/*:$CRAIL_JAR/*
+#--conf "spark.driver.extraClassPath=/home/ubuntu/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:$CRAIL_JAR/*:/home/ubuntu/hadoop/share/hadoop/common/lib/hadoop-aws-2.7.2.jar:/home/ubuntu/hadoop/share/hadoop/common/lib/aws-java-sdk-1.7.4.jar" \
+#EXTRA_PATH=/home/ubuntu/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:/home/ubuntu/hadoop/share/hadoop/common/lib/*:$CRAIL_JAR/*
 #--conf "spark.driver.extraClassPath=$EXTRA_PATH" \
 #--conf "spark.executor.extraClassPath=$EXTRA_PATH" \
 
@@ -159,10 +159,10 @@ mv blaze.log sampled_blaze.log
 rm blaze.log
 rm disk_log.txt
 
-parallel-ssh -i -h $HOME/compute-hosts.txt 'rm -rf /home/wonook/spark_cache/*'	
+parallel-ssh -i -h $HOME/compute-hosts.txt 'rm -rf /home/ubuntu/blaze_cache/*'	
 
 echo "Remove spark shuffle dir"
-parallel-ssh -i -h $HOME/compute-hosts.txt 'rm -rf /home/wonook/spark_shuffle/*'	
+parallel-ssh -i -h $HOME/compute-hosts.txt 'rm -rf /home/ubuntu/blaze_shuffle/*'	
 
 
 echo "Application Starts Running"
@@ -172,7 +172,7 @@ python exception_killer.py &
 
 
 start_time="$(date -u +%s)"
-#--packages com.microsoft.ml.spark:mmlspark_2.11:1.0.0-rc1 \
+#--packages com.microsoft.ml.spark:mmlspark_2.12:1.0.0-rc1 \
 
 ./bin/spark-submit -v \
 	--num-executors $EXECUTORS --executor-cores $CORES --executor-memory $MEM_SIZE \

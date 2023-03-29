@@ -248,6 +248,8 @@ object SparkEnv extends Logging {
       listenerBus: LiveListenerBus = null,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
+    logInfo(s"Created executor ${executorId}")
+
     val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
 
     // Listener bus is only used on the driver
@@ -336,7 +338,7 @@ object SparkEnv extends Logging {
 
     // Mapping from block manager id to the block manager's information.
     val blockManagerInfo = new concurrent.TrieMap[BlockManagerId, BlockManagerInfo]()
-    val blockManagerMasterEndpoint =
+    lazy val blockManagerMasterEndpoint =
       new BlockManagerMasterEndpoint(
         rpcEnv,
         isLocal,

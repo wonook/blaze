@@ -7,7 +7,7 @@ MEM_FRACTION=0.2
 DAG_PATH=None
 
 CLASS=org.apache.spark.examples.graphx.SVDPlusPlusExample
-JAR=/home/wonook/blaze/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
+JAR=/home/ubuntu/blaze/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
 ARGS=/svdpp-tiny
 MEM_OVERHEAD=3g
 

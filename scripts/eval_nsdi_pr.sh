@@ -23,7 +23,7 @@ DAG_PATH=None
 ITER=10
 
 CLASS=com.ibm.crail.benchmarks.Main
-JAR="/home/wonook/sql-benchmarks/target/sql-benchmarks-1.0.jar"
+JAR="/home/ubuntu/blaze_benchmarks/sql-benchmarks/target/sql-benchmarks-1.0.jar"
 #ARGS="-t pagerank -gi 10 -i /user/ubuntu/data/graphx/twitter"
 ARGS="-t pagerank -gi 10 -i /twitter"
 #ARGS="-t pagerank -gi 10 -i /followers.txt"
@@ -40,7 +40,7 @@ CORES=3
 TEST_NAME=CC
 # CC 
 CLASS=org.apache.spark.examples.graphx.ConnectedComponentsExample
-JAR=/home/ubuntu/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
+JAR=/home/ubuntu/blaze/examples/target/scala-2.12/jars/spark-examples_2.12-3.3.2.jar
 ARGS="/twitter"
 
 

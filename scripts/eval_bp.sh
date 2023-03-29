@@ -2,10 +2,10 @@
 
 APPNAME=BP
 APPCLASS=org.graphframes.examples.BeliefPropagation
-APPJAR=/home/wonook/graphframes/target/scala-2.11/graphframes-assembly-0.6.0-spark2.3.jar
+APPJAR=/home/ubuntu/graphframes/target/scala-2.12/graphframes-assembly-0.6.0-spark2.3.jar
 ARGS="3200"
 
-PACKAGES=com.microsoft.ml.spark:mmlspark_2.11:1.0.0-rc1
+PACKAGES=com.microsoft.ml.spark:mmlspark_2.12:1.0.0-rc1
 EXECUTORS=3
 EXECUTOR_MEM_SIZE=16g
 DISAGG_MEM_SIZE=24g
@@ -16,7 +16,7 @@ STORING_POLICY=Default
 CACHING_POLICY=None
 AUTOCACHING=false
 EVICT_POLICY=DRDD
-DAG_PATH=/home/wonook/spark/bp_log.txt
+DAG_PATH=/home/ubuntu/blaze/bp_log.txt
 
 ./ours.sh $APPNAME $APPCLASS $APPJAR $ARGS \
 $PACKAGES $EXECUTORS $EXECUTOR_MEM_SIZE $DISAGG_MEM_SIZE $FRACTION \

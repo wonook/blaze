@@ -7,7 +7,7 @@ MEM_FRACTION=0.4
 DAG_PATH=None
 
 CLASS=org.apache.spark.examples.ml.LogisticRegressionExample
-JAR=/home/wonook/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
+JAR=/home/ubuntu/blaze/examples/target/scala-2.12/jars/spark-examples_2.12-3.3.2.jar
 ARGS="/a1a"
 MEM_OVERHEAD=4g
 

@@ -2,10 +2,10 @@
 
 APPNAME=DC
 APPCLASS=org.apache.spark.examples.ml.DecisionTreeClassificationExample
-APPJAR=/home/wonook/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
+APPJAR=/home/ubuntu/blaze/examples/target/scala-2.12/jars/spark-examples_2.12-3.3.2.jar
 ARGS="dummy"
 
-PACKAGES=com.microsoft.ml.spark:mmlspark_2.11:1.0.0-rc1
+PACKAGES=com.microsoft.ml.spark:mmlspark_2.12:1.0.0-rc1
 EXECUTORS=5
 EXECUTOR_MEM_SIZE=16g
 DISAGG_MEM_SIZE=70g
@@ -16,7 +16,7 @@ STORING_POLICY=Default
 CACHING_POLICY=None
 AUTOCACHING=true
 EVICT_POLICY=DRDD
-DAG_PATH=/home/wonook/spark/deci_log.txt
+DAG_PATH=/home/ubuntu/blaze/deci_log.txt
 
 #echo $APPNAME $APPCLASS $APPJAR $ARGS \
 #$PACKAGES $EXECUTORS $EXECUTOR_MEM_SIZE $DISAGG_MEM_SIZE $FRACTION \

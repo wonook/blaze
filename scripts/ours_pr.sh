@@ -18,10 +18,10 @@ DAG_PATH=${15}
 
 # Restart Crail
 
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /dev/hugepages/cache/*'
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /dev/hugepages/data/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_ubuntu | sudo -S rm -rf /dev/hugepages/cache/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_ubuntu | sudo -S rm -rf /dev/hugepages/data/*'
 
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /disagg/ssd0/yarn/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_ubuntu | sudo -S rm -rf /disagg/ssd0/yarn/*'
 
 stop-crail.sh && start-crail.sh
 sleep 5
@@ -63,7 +63,7 @@ touch $DIR/log.txt
 --conf "spark.disagg.evictpolicy=$EVICT_POLICY" \
 --conf "spark.disagg.autocaching=$AUTOCACHING" \
 $APPJAR \
--t pagerank -gi 3 -i /user/wonook/twitter \
+-t pagerank -gi 3 -i /user/ubuntu/twitter \
 2>&1 | tee $DIR/log.txt 
 
 touch  $DIR/disagg_usage.txt

@@ -8,7 +8,7 @@ MEM_FRACTION=0.25
 DAG_PATH=None
 
 CLASS=com.ibm.crail.benchmarks.Main
-JAR=/home/wonook/sql-benchmarks/target/sql-benchmarks-1.0.jar
+JAR=/home/ubuntu/blaze_benchmarks/sql-benchmarks/target/sql-benchmarks-1.0.jar
 MEM_OVERHEAD=4g
 
 SLACK=0
@@ -32,7 +32,7 @@ TEST_TYPE=Blaze-Disk-Recomp-Cost
 
 
 CLASS=org.apache.spark.examples.graphx.ConnectedComponentsExample
-JAR=/home/wonook/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar
+JAR=/home/ubuntu/blaze/examples/target/scala-2.12/jars/spark-examples_2.12-3.3.2.jar
 TEST_NAME=CC
 #ARGS="/8m-small-vertex-graph.txt"
 ARGS="/pr-too-small"

@@ -1,6 +1,6 @@
 TEST_NAME=ALSExample
 CLASS=org.apache.spark.examples.ml.ALSExample
-JAR=/home/wonook/spark/examples/target/scala-2.12/jars/spark-examples_2.12-3.0.0.jar
+JAR=/home/ubuntu/blaze/examples/target/scala-2.12/jars/spark-examples_2.12-3.3.2.jar
 ARGS="none"
 DAG_PATH=None
 

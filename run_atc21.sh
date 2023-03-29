@@ -20,7 +20,7 @@ ITER="${12}"
 COST="${13}"
 ARGS="${@:14}"
 
-HOME_DIR=/home/wonook
+HOME_DIR=/home/ubuntu
 
 echo $SAMPLING_TIMEOUT
 echo $ARGS
@@ -253,5 +253,5 @@ message=$message"Args $ARGS\n"
 message=$message"Profiling $sampling_time sec (timeout $SAMPLING_TIMEOUT)\n"
 message=$message"JCT $jct sec\n"
 
-./send_slack.sh  $message
+./scripts/send_slack.sh  $message
 

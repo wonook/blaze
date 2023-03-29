@@ -14,10 +14,10 @@ AUTOCACHING=${11}
 ITER=3
 
 
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /dev/hugepages/cache/*'
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /dev/hugepages/data/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_ubuntu | sudo -S rm -rf /dev/hugepages/cache/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_ubuntu | sudo -S rm -rf /dev/hugepages/data/*'
 
-parallel-ssh -h ~/compute-hosts.txt 'echo splab_wonook | sudo -S rm -rf /disagg/ssd0/yarn/*'
+parallel-ssh -h ~/compute-hosts.txt 'echo splab_ubuntu | sudo -S rm -rf /disagg/ssd0/yarn/*'
 
 stop-crail.sh && start-crail.sh
 
@@ -59,8 +59,8 @@ touch $DIR/log.txt
 --conf "spark.disagg.dagpath=$DAG_PATH" \
 --conf "spark.disagg.evictpolicy=$EVICT_POLICY" \
 --conf "spark.disagg.autocaching=$AUTOCACHING" \
-/home/wonook/sql-benchmarks/target/sql-benchmarks-1.0.jar \
--t pagerank -gi $ITER -i /user/wonook/twitter \
+/home/ubuntu/blaze_benchmarks/sql-benchmarks/target/sql-benchmarks-1.0.jar \
+-t pagerank -gi $ITER -i /user/ubuntu/twitter \
 2>&1 | tee $DIR/log.txt
 
 touch  $DIR/disagg_usage.txt

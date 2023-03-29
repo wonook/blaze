@@ -3,7 +3,7 @@
 ./bin/spark-submit -v \
 --num-executors 5 --executor-cores 4 --executor-memory 32G --driver-memory 1G \
 --master yarn --class org.apache.spark.examples.ml.ALSExample \
-/home/wonook/spark/examples/target/scala-2.11/jars/spark-examples_2.11-2.4.4.jar \
+/home/ubuntu/blaze/examples/target/scala-2.12/jars/spark-examples_2.12-3.3.2.jar \
 data/mllib/als/sample_output \
 2>&1 | tee log_als
 
