@@ -201,7 +201,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
     }
     final long et = System.currentTimeMillis();
-    logger.info("TGLOG ShuffleWrite None " + (et - st));
+    logger.info("[BLAZE] ShuffleWrite None " + (et - st));
   }
 
   private void open() throws SparkException {

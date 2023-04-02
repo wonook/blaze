@@ -84,7 +84,7 @@ python/test_coverage/coverage_data
 python/test_coverage/htmlcov
 python/pyspark/python
 .mypy_cache/
-reports/
+report/
 scalastyle-on-compile.generated.xml
 scalastyle-output.xml
 scalastyle.txt

@@ -404,7 +404,7 @@ private[spark] class MemoryStore(
               new CompletionTimeIterator[T, Iterator[T]](unrolledIterator) {
                 override def completion(accTime: Long): Unit = {
                   if (TaskContext.get() != null) {
-                    logInfo(s"TGLOG ReadDiskIter ${blockId} " +
+                    logInfo(s"[BLAZE] ReadDiskIter ${blockId} " +
                       s"${accTime} ${TaskContext.get().taskAttemptId()}")
                   }
                 }
@@ -417,9 +417,9 @@ private[spark] class MemoryStore(
 
     val et = System.currentTimeMillis()
     if (TaskContext.get() != null) {
-      logInfo(s"TGLOG PutIterator ${blockId} ${et - st} ${TaskContext.get().taskAttemptId()}")
+      logInfo(s"[BLAZE] PutIterator ${blockId} ${et - st} ${TaskContext.get().taskAttemptId()}")
     } else {
-      logInfo(s"TGLOG PutIterator ${blockId} ${et - st}")
+      logInfo(s"[BLAZE] PutIterator ${blockId} ${et - st}")
     }
 
     result
@@ -497,9 +497,9 @@ private[spark] class MemoryStore(
     }
     val et = System.currentTimeMillis()
     if (TaskContext.get() != null) {
-      logInfo(s"TGLOG GetValue ${blockId} ${et - st} ${TaskContext.get().taskAttemptId()}")
+      logInfo(s"[BLAZE] GetValue ${blockId} ${et - st} ${TaskContext.get().taskAttemptId()}")
     } else {
-      logInfo(s"TGLOG GetValue ${blockId} ${et - st}")
+      logInfo(s"[BLAZE] GetValue ${blockId} ${et - st}")
     }
     result
   }
@@ -527,7 +527,7 @@ private[spark] class MemoryStore(
     if (entry != null) {
       freeMemoryEntry(entry)
       memoryManager.releaseStorageMemory(entry.size, entry.memoryMode)
-      logInfo(s"Block $blockId of size ${entry.size} dropped " +
+      logInfo(s"[BLAZE] Block $blockId of size ${entry.size} dropped " +
         s"from memory (free ${maxMemory - blocksMemoryUsed})")
       true
     } else {
@@ -543,7 +543,7 @@ private[spark] class MemoryStore(
     onHeapUnrollMemoryMap.clear()
     offHeapUnrollMemoryMap.clear()
     memoryManager.releaseAllStorageMemory()
-    logInfo("MemoryStore cleared")
+    logInfo("[BLAZE] MemoryStore cleared")
   }
 
   /**
@@ -652,7 +652,7 @@ private[spark] class MemoryStore(
       if (freedMemory >= space) {
         var lastSuccessfulBlock = -1
         try {
-          logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
+          logInfo(s"[BLAZE] ${selectedBlocks.size} blocks selected for dropping " +
             s"(${Utils.bytesToString(freedMemory)} bytes)")
           (0 until selectedBlocks.size).foreach { idx =>
             val (blockId, spillToDisk) = selectedBlocks(idx)
@@ -676,15 +676,19 @@ private[spark] class MemoryStore(
             }
             lastSuccessfulBlock = idx
           }
-          logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
+          logInfo(s"[BLAZE] After dropping ${selectedBlocks.size} blocks, " +
             s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
 
           val et = System.currentTimeMillis()
           if (TaskContext.get() != null) {
-            logInfo(s"[VictimSelection] Evicting selectedBlocks for $blockId took " +
-              s"${et - st} in Task ${TaskContext.get().taskAttemptId()}")
+            logInfo(s"[BLAZE] [VictimSelection] Evicting selectedBlocks for $blockId took " +
+              s"${et - st} for ${selectedBlocks.size} blocks " +
+              s"(${Utils.bytesToString(freedMemory)} bytes)" +
+              s"in Task ${TaskContext.get().taskAttemptId()}")
           } else {
-            logInfo(s"[VictimSelection] Evicting selectedBlocks for $blockId took ${et - st}")
+            logInfo(s"[BLAZE] [VictimSelection] Evicting selectedBlocks for $blockId took " +
+              s"${et - st} for ${selectedBlocks.size} blocks " +
+              s"(${Utils.bytesToString(freedMemory)} bytes)")
           }
 
           freedMemory

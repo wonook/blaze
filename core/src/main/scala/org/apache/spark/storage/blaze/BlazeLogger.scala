@@ -48,9 +48,11 @@ private[spark] object BlazeLogger extends Logging {
   def materialized(blockId: BlockId, stageId: Int, executorId: String, size: Long,
                    onDisk: Boolean): Unit = {
     if (onDisk) {
-      logInfo(s"[BLAZE] PERSIST_DONE\tStage $stageId\tExecutor $executorId\t$blockId\tSerSize $size")
+      logInfo(s"[BLAZE] PERSIST_DONE\tStage $stageId\tExecutor" +
+        s"$executorId\t$blockId\tSerSize $size")
     } else {
-      logInfo(s"[BLAZE] CACHING_DONE\tStage $stageId\tExecutor$executorId\t$blockId\tDeserSize $size")
+      logInfo(s"[BLAZE] CACHING_DONE\tStage $stageId\tExecutor" +
+        s"$executorId\t$blockId\tDeserSize $size")
     }
   }
 

@@ -183,7 +183,7 @@ final class BypassMergeSortShuffleWriter<K, V>
       mapStatus = MapStatus$.MODULE$.apply(
         blockManager.shuffleServerId(), partitionLengths, mapId);
       final long et = System.currentTimeMillis();
-      logger.info("TGLOG ShuffleWrite None " + (et - st));
+      logger.info("[BLAZE] ShuffleWrite None " + (et - st));
     } catch (Exception e) {
       try {
         mapOutputWriter.abort(e);

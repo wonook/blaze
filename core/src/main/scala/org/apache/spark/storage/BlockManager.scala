@@ -407,7 +407,7 @@ private[spark] class BlockManager(
             saveSerializedValuesToMemoryStore(readToByteBuffer())
           }
           if (!putSucceeded && level.useDisk) {
-            logWarning(s"Persisting block $blockId to disk instead.")
+            logWarning(s"[BLAZE] Persisting block $blockId to disk instead.")
             saveToDiskStore()
           }
         } else if (level.useDisk) {
@@ -424,7 +424,7 @@ private[spark] class BlockManager(
           }
           addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
         }
-        logDebug(s"Put block ${blockId} locally took ${Utils.getUsedTimeNs(startTimeNs)}")
+        logInfo(s"[BLAZE] Put block ${blockId} locally took ${Utils.getUsedTimeNs(startTimeNs)}")
         if (level.replication > 1) {
           // Wait for asynchronous replication to finish
           try {
@@ -519,7 +519,7 @@ private[spark] class BlockManager(
       val priorityClass = conf.get(config.STORAGE_REPLICATION_POLICY)
       val clazz = Utils.classForName(priorityClass)
       val ret = clazz.getConstructor().newInstance().asInstanceOf[BlockReplicationPolicy]
-      logInfo(s"Using $priorityClass for block replication policy")
+      logInfo(s"[BLAZE] Using $priorityClass for block replication policy")
       ret
     }
 
@@ -531,7 +531,7 @@ private[spark] class BlockManager(
     // the registration with the ESS. Therefore, this registration should be prior to
     // the BlockManager registration. See SPARK-39647.
     if (externalShuffleServiceEnabled) {
-      logInfo(s"external shuffle service port = $externalShuffleServicePort")
+      logInfo(s"[BLAZE] external shuffle service port = $externalShuffleServicePort")
       shuffleServerId = BlockManagerId(executorId, blockTransferService.hostName,
         externalShuffleServicePort)
       if (!isDriver) {
@@ -570,7 +570,7 @@ private[spark] class BlockManager(
       }
     }
 
-    logInfo(s"Initialized BlockManager: $blockManagerId")
+    logInfo(s"[BLAZE] Initialized BlockManager: $blockManagerId")
   }
 
   def shuffleMetricsSource: Source = {
@@ -584,7 +584,7 @@ private[spark] class BlockManager(
   }
 
   private def registerWithExternalShuffleServer(): Unit = {
-    logInfo("Registering executor with local external shuffle service.")
+    logInfo("[BLAZE] Registering executor with local external shuffle service.")
     val shuffleManagerMeta =
       if (Utils.isPushBasedShuffleEnabled(conf, isDriver = isDriver, checkSerializer = false)) {
         s"${shuffleManager.getClass.getName}:" +
@@ -627,7 +627,7 @@ private[spark] class BlockManager(
    * will be made then.
    */
   private def reportAllBlocks(): Unit = {
-    logInfo(s"Reporting ${blockInfoManager.size} blocks to the master.")
+    logInfo(s"[BLAZE] Reporting ${blockInfoManager.size} blocks to the master.")
     for ((blockId, info) <- blockInfoManager.entries) {
       val status = getCurrentBlockStatus(blockId, info)
       if (info.tellMaster && !tryToReportBlockStatus(blockId, status)) {
@@ -645,7 +645,7 @@ private[spark] class BlockManager(
    */
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
-    logInfo(s"BlockManager $blockManagerId re-registering with master")
+    logInfo(s"[BLAZE] BlockManager $blockManagerId re-registering with master")
     val id = master.registerBlockManager(blockManagerId, diskBlockManager.localDirsString,
       maxOnHeapMemory, maxOffHeapMemory, storageEndpoint, isReRegister = true)
     if (id.executorId != BlockManagerId.INVALID_EXECUTOR_ID) {
@@ -701,7 +701,7 @@ private[spark] class BlockManager(
    */
   override def getLocalBlockData(blockId: BlockId): ManagedBuffer = {
     if (blockId.isShuffle) {
-      logDebug(s"Getting local shuffle block ${blockId}")
+      logInfo(s"[BLAZE] Getting local shuffle block ${blockId}")
       try {
         shuffleManager.shuffleBlockResolver.getBlockData(blockId)
       } catch {
@@ -748,7 +748,7 @@ private[spark] class BlockManager(
     checkShouldStore(blockId)
 
     if (blockId.isShuffle) {
-      logDebug(s"Putting shuffle block ${blockId}")
+      logInfo(s"[BLAZE] Putting shuffle block ${blockId}")
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
@@ -757,12 +757,12 @@ private[spark] class BlockManager(
             blockId)
       }
     }
-    logDebug(s"Putting regular block ${blockId}")
+    logInfo(s"[BLAZE] Putting regular block ${blockId}")
     // All other blocks
     val (_, tmpFile) = diskBlockManager.createTempShuffleBlock()
     val channel = new CountingWritableChannel(
       Channels.newChannel(serializerManager.wrapForEncryption(new FileOutputStream(tmpFile))))
-    logTrace(s"Streaming block $blockId to tmp file $tmpFile")
+    logInfo(s"[BLAZE] Streaming block $blockId to tmp file $tmpFile")
     new StreamCallbackWithID {
 
       override def getID: String = blockId.name
@@ -774,7 +774,7 @@ private[spark] class BlockManager(
       }
 
       override def onComplete(streamId: String): Unit = {
-        logTrace(s"Done receiving block $blockId, now putting into local blockManager")
+        logInfo(s"[BLAZE] Done receiving block $blockId, now putting into local blockManager")
         // Note this is all happening inside the netty thread as soon as it reads the end of the
         // stream.
         channel.close()
@@ -856,11 +856,11 @@ private[spark] class BlockManager(
       droppedMemorySize: Long = 0L): Unit = {
     val needReregister = !tryToReportBlockStatus(blockId, status, droppedMemorySize)
     if (needReregister) {
-      logInfo(s"Got told to re-register updating block $blockId")
+      logInfo(s"[BLAZE] Got told to re-register updating block $blockId")
       // Re-registering will report our new block for free.
       asyncReregister()
     }
-    logDebug(s"Told master about block $blockId")
+    logInfo(s"[BLAZE] Told master about block $blockId")
   }
 
   /**
@@ -912,7 +912,7 @@ private[spark] class BlockManager(
   private def getLocationBlockIds(blockIds: Array[BlockId]): Array[Seq[BlockManagerId]] = {
     val startTimeNs = System.nanoTime()
     val locations = master.getLocations(blockIds).toArray
-    logDebug(s"Got multiple block location in ${Utils.getUsedTimeNs(startTimeNs)}")
+    logInfo(s"[BLAZE] Got multiple block location in ${Utils.getUsedTimeNs(startTimeNs)}")
     locations
   }
 
@@ -931,14 +931,14 @@ private[spark] class BlockManager(
    * Get block from local block manager as an iterator of Java objects.
    */
   def getLocalValues(blockId: BlockId): Option[BlockResult] = {
-    logDebug(s"Getting local block $blockId")
+    logInfo(s"[BLAZE] Getting local block $blockId")
     blockInfoManager.lockForReading(blockId) match {
       case None =>
-        logDebug(s"Block $blockId was not found")
+        logInfo(s"[BLAZE] Block $blockId was not found")
         None
       case Some(info) =>
         val level = info.level
-        logDebug(s"Level for block $blockId is $level")
+        logInfo(s"[BLAZE] Level for block $blockId is $level")
         val taskContext = Option(TaskContext.get())
         if (level.useMemory && memoryStore.contains(blockId)) {
           val iter: Iterator[Any] = if (level.deserialized) {
@@ -1015,7 +1015,7 @@ private[spark] class BlockManager(
    * Get block from the local block manager as serialized bytes.
    */
   def getLocalBytes(blockId: BlockId): Option[BlockData] = {
-    logDebug(s"Getting local block $blockId as bytes")
+    logInfo(s"[BLAZE] Getting local block $blockId as bytes")
     assert(!blockId.isShuffle, s"Unexpected ShuffleBlockId $blockId")
     blockInfoManager.lockForReading(blockId).map { info => doGetLocalBytes(blockId, info) }
   }
@@ -1028,7 +1028,7 @@ private[spark] class BlockManager(
    */
   private def doGetLocalBytes(blockId: BlockId, info: BlockInfo): BlockData = {
     val level = info.level
-    logDebug(s"Level for block $blockId is $level")
+    logInfo(s"[BLAZE] Level for block $blockId is $level")
     // In order, try to read the serialized bytes from memory, then from disk, then fall back to
     // serializing in-memory objects, and, finally, throw an exception if the block does not exist.
     if (level.deserialized) {
@@ -1093,14 +1093,14 @@ private[spark] class BlockManager(
   private[spark] def getRemoteBlock[T](
       blockId: BlockId,
       bufferTransformer: ManagedBuffer => T): Option[T] = {
-    logDebug(s"Getting remote block $blockId")
+    logInfo(s"[BLAZE] Getting remote block $blockId")
     require(blockId != null, "BlockId is null")
 
     // Because all the remote blocks are registered in driver, it is not necessary to ask
     // all the storage endpoints to get block status.
     val locationsAndStatusOption = master.getLocationsAndStatus(blockId, blockManagerId.host)
     if (locationsAndStatusOption.isEmpty) {
-      logDebug(s"Block $blockId is unknown by block manager master")
+      logInfo(s"[BLAZE] Block $blockId is unknown by block manager master")
       None
     } else {
       val locationsAndStatus = locationsAndStatusOption.get
@@ -1114,11 +1114,11 @@ private[spark] class BlockManager(
             Some(bufferTransformer(blockData))
           } catch {
             case NonFatal(e) =>
-              logDebug("Block from the same host executor cannot be opened: ", e)
+              logInfo("[BLAZE] Block from the same host executor cannot be opened: ", e)
               None
           }
         }
-        logInfo(s"Read $blockId from the disk of a same host executor is " +
+        logInfo(s"[BLAZE] Read $blockId from the disk of a same host executor is " +
           (if (res.isDefined) "successful." else "failed."))
         res
       }.orElse {
@@ -1175,7 +1175,7 @@ private[spark] class BlockManager(
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
       val loc = locationIterator.next()
-      logDebug(s"Getting remote block $blockId from $loc")
+      logInfo(s"[BLAZE] Getting remote block $blockId from $loc")
       val data = try {
         val buf = blockTransferService.fetchBlockSync(loc.host, loc.port, loc.executorId,
           blockId.toString, tempFileManager)
@@ -1193,13 +1193,13 @@ private[spark] class BlockManager(
             // Give up trying anymore locations. Either we've tried all of the original locations,
             // or we've refreshed the list of locations from the master, and have still
             // hit failures after trying locations from the refreshed list.
-            logWarning(s"Failed to fetch remote block $blockId " +
+            logWarning(s"[BLAZE] Failed to fetch remote block $blockId " +
               s"from [${locations.mkString(", ")}] after $totalFailureCount fetch failures. " +
               s"Most recent failure cause:", e)
             return None
           }
 
-          logWarning(s"Failed to fetch remote block $blockId " +
+          logWarning(s"[BLAZE] Failed to fetch remote block $blockId " +
             s"from $loc (failed attempt $runningFailureCount)", e)
 
           // If there is a large number of executors then locations list can contain a
@@ -1208,7 +1208,7 @@ private[spark] class BlockManager(
           // we refresh the block locations after a certain number of fetch failures
           if (runningFailureCount >= maxFailuresBeforeLocationRefresh) {
             locationIterator = sortLocations(master.getLocations(blockId)).iterator
-            logDebug(s"Refreshed locations from the driver " +
+            logInfo(s"[BLAZE] Refreshed locations from the driver " +
               s"after ${runningFailureCount} fetch failures.")
             runningFailureCount = 0
           }
@@ -1226,9 +1226,9 @@ private[spark] class BlockManager(
         assert(!data.isInstanceOf[BlockManagerManagedBuffer])
         return Some(data)
       }
-      logDebug(s"The value of block $blockId is null")
+      logInfo(s"[BLAZE] The value of block $blockId is null")
     }
-    logDebug(s"Block $blockId not found")
+    logInfo(s"[BLAZE] Block $blockId not found")
     None
   }
 
@@ -1286,10 +1286,10 @@ private[spark] class BlockManager(
 
     val local = getLocalValues(blockId)
     if (local.isDefined) {
-      logInfo(s"Found block $blockId locally")
+      logInfo(s"[BLAZE] Found block $blockId locally")
       val get = System.currentTimeMillis()
       if (TaskContext.get() != null) {
-        logInfo(s"TGLOG GET ${blockId} ${get - gst} ${TaskContext.get().taskAttemptId()}")
+        logInfo(s"[BLAZE] [BLAZE] GET ${blockId} ${get - gst} ${TaskContext.get().taskAttemptId()}")
       }
       return local
     }
@@ -1298,7 +1298,7 @@ private[spark] class BlockManager(
 
     val remote = getRemoteValues[T](blockId)
     if (remote.isDefined) {
-      logInfo(s"Found block $blockId remotely")
+      logInfo(s"[BLAZE] Found block $blockId remotely")
       val et = System.currentTimeMillis()
       if (blockId.isRDD) {
         blazeManager.cacheHit(blockId, executorId, true, false, et - st)
@@ -1330,7 +1330,8 @@ private[spark] class BlockManager(
     // SPARK-27666. When a task completes, Spark automatically releases all the blocks locked
     // by this task. We should not release any locks for a task that is already completed.
     if (taskContext.isDefined && taskContext.get.isCompleted) {
-      logWarning(s"Task ${taskAttemptId.get} already completed, not releasing lock for $blockId")
+      logWarning(s"[BLAZE] Task ${taskAttemptId.get} already completed, " +
+        s"not releasing lock for $blockId")
     } else {
       blockInfoManager.unlock(blockId, taskAttemptId)
     }
@@ -1480,7 +1481,7 @@ private[spark] class BlockManager(
       if (blockInfoManager.lockNewBlockForWriting(blockId, newInfo)) {
         newInfo
       } else {
-        logWarning(s"Block $blockId already exists on this machine; not re-adding it")
+        logWarning(s"[BLAZE] Block $blockId already exists on this machine; not re-adding it")
         if (!keepReadLock) {
           // lockNewBlockForWriting returned a read lock on the existing block, so we must free it:
           releaseLock(blockId)
@@ -1503,14 +1504,14 @@ private[spark] class BlockManager(
         }
       } else {
         removeBlockInternal(blockId, tellMaster = false, isLocal = true)
-        logWarning(s"Putting block $blockId failed")
+        logWarning(s"[BLAZE] Putting block $blockId failed")
       }
       res
     } catch {
       // Since removeBlockInternal may throw exception,
       // we should print exception first to show root cause.
       case NonFatal(e) =>
-        logWarning(s"Putting block $blockId failed due to exception $e.")
+        logWarning(s"[BLAZE] Putting block $blockId failed due to exception $e.")
         throw e
     } finally {
       // This cleanup is performed in a finally block rather than a `catch` to avoid having to
@@ -1530,9 +1531,9 @@ private[spark] class BlockManager(
     }
     val usedTimeMs = Utils.getUsedTimeNs(startTimeNs)
     if (level.replication > 1) {
-      logDebug(s"Putting block ${blockId} with replication took $usedTimeMs")
+      logInfo(s"[BLAZE] Putting block ${blockId} with replication took $usedTimeMs")
     } else {
-      logDebug(s"Putting block ${blockId} without replication took ${usedTimeMs}")
+      logInfo(s"[BLAZE] Putting block ${blockId} without replication took ${usedTimeMs}")
     }
     result
   }
@@ -1580,7 +1581,7 @@ private[spark] class BlockManager(
             case Left(iter) =>
               // Not enough space to unroll this block; drop to disk if applicable
 //              if (IS_BLAZE && DISKSTORE_ENABLED) {
-//                logWarning(s"Persisting block $blockId to disk instead.")
+//                logWarning(s"[BLAZE] Persisting block $blockId to disk instead.")
 //                diskStore.put(blockId) { channel =>
 //                  val out = Channels.newOutputStream(channel)
 //                  serializerManager.dataSerializeStream(blockId, out, iter)(classTag)
@@ -1601,7 +1602,7 @@ private[spark] class BlockManager(
             case Left(partiallySerializedValues) =>
               // Not enough space to unroll this block; drop to disk if applicable
               if (DISKSTORE_ENABLED) {
-                logWarning(s"Persisting block $blockId to disk instead.")
+                logWarning(s"[BLAZE] Persisting block $blockId to disk instead.")
                 diskStore.put(blockId) { channel =>
                   val out = Channels.newOutputStream(channel)
                   partiallySerializedValues.finishWritingToStream(out)
@@ -1630,7 +1631,7 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, putBlockStatus)
         }
         addUpdatedBlockStatusToTaskMetrics(blockId, putBlockStatus)
-        logDebug(s"Put block $blockId locally took ${Utils.getUsedTimeNs(startTimeNs)}")
+        logInfo(s"[BLAZE] Put block $blockId locally took ${Utils.getUsedTimeNs(startTimeNs)}")
         if (level.replication > 1) {
           val remoteStartTimeNs = System.nanoTime()
           val bytesToReplicate = doGetLocalBytes(blockId, info)
@@ -1647,7 +1648,8 @@ private[spark] class BlockManager(
           } finally {
             bytesToReplicate.dispose()
           }
-          logDebug(s"Put block $blockId remotely took ${Utils.getUsedTimeNs(remoteStartTimeNs)}")
+          logInfo(s"[BLAZE] Put block $blockId remotely took " +
+            s"${Utils.getUsedTimeNs(remoteStartTimeNs)}")
         }
       }
       blockWasSuccessfullyStored = blockWasSuccessfullyStored
@@ -1670,6 +1672,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       level: StorageLevel,
       diskData: BlockData): Option[ChunkedByteBuffer] = {
+    val st = System.currentTimeMillis()
     require(!level.deserialized)
     if (level.useMemory) {
       // Synchronize on blockInfo to guard against a race condition where two readers both try to
@@ -1697,11 +1700,12 @@ private[spark] class BlockManager(
             if (putSucceeded) {
               diskData.dispose()
               blazeManager.promotionDone(blockId, TaskContext.get().stageId(), executorId)
-              logInfo(s"[Promotion] $blockId succeeded")
+              logInfo(s"[BLAZE] [Promotion] $blockId on disk (${diskData.size}) succeeded " +
+                s"in ${System.currentTimeMillis() - st} ms")
               reportBlockStatus(blockId, getCurrentBlockStatus(blockId, blockInfo))
               Some(memoryStore.getBytes(blockId).get)
             } else {
-              logInfo(s"[Promotion] $blockId failed to recache in MemoryStore")
+              logInfo(s"[BLAZE] [Promotion] $blockId failed to recache in MemoryStore")
               None
             }
           } else {
@@ -1743,11 +1747,11 @@ private[spark] class BlockManager(
               true) match {
               case Left(iter) =>
                 // The memory store put() failed, so it returned the iterator back to us:
-                logInfo(s"[Promotion] $blockId failed to recache in MemoryStore")
+                logInfo(s"[BLAZE] [Promotion] $blockId failed to recache in MemoryStore")
                 iter
               case Right(_) =>
                 blazeManager.promotionDone(blockId, TaskContext.get().stageId(), executorId)
-                logInfo(s"[Promotion] $blockId succeeded")
+                logInfo(s"[BLAZE] [Promotion] $blockId succeeded")
                 reportBlockStatus(blockId, getCurrentBlockStatus(blockId, blockInfo))
                 // The put() succeeded, so we can read the values back:
                 memoryStore.getValues(blockId).get
@@ -1773,7 +1777,7 @@ private[spark] class BlockManager(
       if (cachedPeers == null || forceFetch || timeout) {
         cachedPeers = master.getPeers(blockManagerId).sortBy(_.hashCode)
         lastPeerFetchTimeNs = System.nanoTime()
-        logDebug("Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
+        logInfo("[BLAZE] Fetched peers from master: " + cachedPeers.mkString("[", ",", "]"))
       }
       if (cachedPeers.isEmpty &&
           conf.get(config.STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH).isDefined) {
@@ -1799,7 +1803,7 @@ private[spark] class BlockManager(
       existingReplicas: Set[BlockManagerId],
       maxReplicas: Int,
       maxReplicationFailures: Option[Int] = None): Boolean = {
-    logInfo(s"Using $blockManagerId to pro-actively replicate $blockId")
+    logInfo(s"[BLAZE] Using $blockManagerId to pro-actively replicate $blockId")
     blockInfoManager.lockForReading(blockId).forall { info =>
       val data = doGetLocalBytes(blockId, info)
       val storageLevel = StorageLevel(
@@ -1816,7 +1820,7 @@ private[spark] class BlockManager(
         replicate(
           blockId, data, storageLevel, info.classTag, existingReplicas, maxReplicationFailures)
       } finally {
-        logDebug(s"Releasing lock for $blockId")
+        logInfo(s"[BLAZE] Releasing lock for $blockId")
         releaseLockAndDispose(blockId, data)
       }
     }
@@ -1865,7 +1869,7 @@ private[spark] class BlockManager(
       val peer = peersForReplication.head
       try {
         val onePeerStartTime = System.nanoTime
-        logTrace(s"Trying to replicate $blockId of ${data.size} bytes to $peer")
+        logInfo(s"[BLAZE] Trying to replicate $blockId of ${data.size} bytes to $peer")
         // This thread keeps a lock on the block, so we do not want the netty thread to unlock
         // block when it finishes sending the message.
         val buffer = new BlockManagerManagedBuffer(blockInfoManager, blockId, data, false,
@@ -1878,7 +1882,7 @@ private[spark] class BlockManager(
           buffer,
           tLevel,
           classTag)
-        logTrace(s"Replicated $blockId of ${data.size} bytes to $peer" +
+        logInfo(s"[BLAZE] Replicated $blockId of ${data.size} bytes to $peer" +
           s" in ${(System.nanoTime - onePeerStartTime).toDouble / 1e6} ms")
         peersForReplication = peersForReplication.tail
         peersReplicatedTo += peer
@@ -1888,7 +1892,7 @@ private[spark] class BlockManager(
           throw e
         // Everything else we may retry
         case NonFatal(e) =>
-          logWarning(s"Failed to replicate $blockId to $peer, failure #$numFailures", e)
+          logWarning(s"[BLAZE] Failed to replicate $blockId to $peer, failure #$numFailures", e)
           peersFailedToReplicateTo += peer
           // we have a failed replication, so we get the list of peers again
           // we don't want peers we have already replicated to and the ones that
@@ -1906,15 +1910,15 @@ private[spark] class BlockManager(
             numPeersToReplicateTo - peersReplicatedTo.size)
       }
     }
-    logDebug(s"Replicating $blockId of ${data.size} bytes to " +
+    logInfo(s"[BLAZE] Replicating $blockId of ${data.size} bytes to " +
       s"${peersReplicatedTo.size} peer(s) took ${(System.nanoTime - startTime) / 1e6} ms")
     if (peersReplicatedTo.size < numPeersToReplicateTo) {
-      logWarning(s"Block $blockId replicated to only " +
+      logWarning(s"[BLAZE] Block $blockId replicated to only " +
         s"${peersReplicatedTo.size} peer(s) instead of $numPeersToReplicateTo peers")
       return false
     }
 
-    logDebug(s"block $blockId replicated to ${peersReplicatedTo.mkString(", ")}")
+    logInfo(s"[BLAZE] block $blockId replicated to ${peersReplicatedTo.mkString(", ")}")
     return true
   }
 
@@ -1954,29 +1958,36 @@ private[spark] class BlockManager(
       blockId: BlockId,
       spillToDisk: Boolean,
       data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
-    logInfo(s"Dropping block $blockId from memory in $executorId")
+    val st = System.currentTimeMillis()
+
+    logInfo(s"[BLAZE] Dropping block $blockId from memory in $executorId")
     val info = blockInfoManager.assertBlockIsLockedForWriting(blockId)
     var blockIsUpdated = false
 //    val level = info.level
 
     // Drop to disk, if storage level requires
     if (spillToDisk && !diskStore.contains(blockId)) {
-      logInfo(s"Writing block $blockId to disk")
+      logInfo(s"[BLAZE] Writing block $blockId to disk")
       data() match {
         case Left(elements) =>
-          diskStore.put(blockId) { channel =>
+          val r = diskStore.put(blockId) { channel =>
             val out = Channels.newOutputStream(channel)
             serializerManager.dataSerializeStream(
               blockId,
               out,
               elements.iterator)(info.classTag.asInstanceOf[ClassTag[T]])
           }
+          val droppedMemorySize =
+            if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
+          logInfo(s"[BLAZE] Wrote block $blockId ($droppedMemorySize) to disk in " +
+            s"${System.currentTimeMillis()-st}ms")
+          r
         case Right(bytes) =>
           diskStore.putBytes(blockId, bytes)
       }
       blockIsUpdated = true
     } else {
-      logWarning(s"Block $blockId already exist in DiskStore, won't drop it")
+      logWarning(s"[BLAZE] Block $blockId already exist in DiskStore, won't drop it")
     }
 
     // Remove from MemoryStore
@@ -1986,7 +1997,7 @@ private[spark] class BlockManager(
     if (blockIsRemoved) {
       blockIsUpdated = true
     } else {
-      logWarning(s"Block $blockId could not be dropped from memory as it does not exist")
+      logWarning(s"[BLAZE] Block $blockId could not be dropped from memory as it does not exist")
     }
 
     // Report it to the driver
@@ -2007,7 +2018,7 @@ private[spark] class BlockManager(
    */
   def removeRdd(rddId: Int): Int = {
     // TODO: Avoid a linear scan by creating another mapping of RDD.id to blocks.
-    logInfo(s"Removing RDD $rddId")
+    logInfo(s"[BLAZE] Removing RDD $rddId")
     val blocksToRemove = blockInfoManager.entries.flatMap(_._1.asRDDId).filter(_.rddId == rddId)
     blocksToRemove.foreach { blockId => removeBlock(blockId, tellMaster = false) }
     blocksToRemove.size
@@ -2018,11 +2029,11 @@ private[spark] class BlockManager(
   private[spark] def decommissionSelf(): Unit = synchronized {
     decommissioner match {
       case None =>
-        logInfo("Starting block manager decommissioning process...")
+        logInfo("[BLAZE] Starting block manager decommissioning process...")
         decommissioner = Some(new BlockManagerDecommissioner(conf, this))
         decommissioner.foreach(_.start())
       case Some(_) =>
-        logDebug("Block manager already in decommissioning state")
+        logInfo("[BLAZE] Block manager already in decommissioning state")
     }
   }
 
@@ -2041,7 +2052,7 @@ private[spark] class BlockManager(
    * Remove all blocks belonging to the given broadcast.
    */
   def removeBroadcast(broadcastId: Long, tellMaster: Boolean): Int = {
-    logDebug(s"Removing broadcast $broadcastId")
+    logInfo(s"[BLAZE] Removing broadcast $broadcastId")
     val blocksToRemove = blockInfoManager.entries.map(_._1).collect {
       case bid @ BroadcastBlockId(`broadcastId`, _) => bid
     }
@@ -2053,7 +2064,7 @@ private[spark] class BlockManager(
    * Remove a block from both memory and disk.
    */
   def removeBlock(blockId: BlockId, tellMaster: Boolean = true): Unit = {
-    logDebug(s"Removing block $blockId")
+    logInfo(s"[BLAZE] Removing block $blockId")
     blockInfoManager.lockForWriting(blockId) match {
       case None =>
         // The block has already been removed; do nothing.
@@ -2061,7 +2072,7 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, BlockStatus.empty)
         }
         addUpdatedBlockStatusToTaskMetrics(blockId, BlockStatus.empty)
-        logWarning(s"Asked to remove block $blockId, which does not exist")
+        logWarning(s"[BLAZE] Asked to remove block $blockId, which does not exist")
       case Some(info) =>
         removeBlockInternal(blockId, tellMaster = tellMaster && info.tellMaster,
           isLocal = false)
@@ -2085,17 +2096,18 @@ private[spark] class BlockManager(
       val removedFromMemory = memoryStore.remove(blockId)
       val removedFromDisk = diskStore.remove(blockId)
       if (!removedFromMemory && !removedFromDisk) {
-        logWarning(s"Block $blockId could not be removed as it was not found on disk or in memory")
+        logWarning(s"[BLAZE] Block $blockId could not be removed as it was not found on disk " +
+          s"or in memory")
       }
 
       blockInfoManager.removeBlock(blockId)
 
       if (removedFromMemory) {
-        logInfo(s"Successfully removed $blockId from MemoryStore of $blockManagerId")
+        logInfo(s"[BLAZE] Successfully removed $blockId from MemoryStore of $blockManagerId")
       }
 
       if (removedFromDisk) {
-        logInfo(s"Successfully removed $blockId from DiskStore of $blockManagerId")
+        logInfo(s"[BLAZE] Successfully removed $blockId from DiskStore of $blockManagerId")
       }
 
       hasRemoveBlock = true
@@ -2106,7 +2118,7 @@ private[spark] class BlockManager(
       }
     } finally {
       if (!hasRemoveBlock) {
-        logWarning(s"Block $blockId was not removed normally.")
+        logWarning(s"[BLAZE] Block $blockId was not removed normally.")
         blockInfoManager.removeBlock(blockId)
       }
     }
@@ -2141,7 +2153,7 @@ private[spark] class BlockManager(
     blockInfoManager.clear()
     memoryStore.clear()
     futureExecutionContext.shutdownNow()
-    logInfo("BlockManager stopped")
+    logInfo("[BLAZE] BlockManager stopped")
   }
 }
 
@@ -2193,10 +2205,10 @@ private[spark] object BlockManager {
       val filePath = file.path()
 
       def cleanUp(): Unit = {
-        logDebug(s"Clean up file $filePath")
+        logInfo(s"[BLAZE] Clean up file $filePath")
 
         if (!new File(filePath).delete()) {
-          logDebug(s"Fail to delete file $filePath")
+          logInfo(s"[BLAZE] Fail to delete file $filePath")
         }
       }
     }

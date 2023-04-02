@@ -254,7 +254,7 @@ class NewHadoopRDD[K, V](
 
       private var havePair = false
 
-      logInfo(s"Sampled run  in NewHadoopRDD $isProfileRun")
+      logInfo(s"[BLAZE]  Sampled run in NewHadoopRDD $isProfileRun")
 
       var cnt = 0
 
@@ -263,7 +263,7 @@ class NewHadoopRDD[K, V](
           try {
             if (isProfileRun) {
               if (cnt >= 100) {
-                logInfo(s"Sampled run reading finished!!")
+                logInfo(s"[BLAZE] Sampled run reading finished!!")
                 finished = true
               } else {
                 finished = !reader.nextKeyValue

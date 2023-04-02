@@ -402,7 +402,8 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
               val agedCost = origCost - costOfCachedBlock.cost.toLong
               metricTracker.memBlockIdToCompCostMap.put(cachedAncestorBlock, agedCost)
               agedAncestors.add(cachedAncestorBlock)
-              logInfo(s"[BLAZE] [Aging] victim ${costOfCachedBlock.blockId} ${costOfCachedBlock.cost}" +
+              logInfo(s"[BLAZE] [Aging] victim ${costOfCachedBlock.blockId} " +
+                s"${costOfCachedBlock.cost}" +
                 s"ancestor $cachedAncestorBlock $origCost aged to $agedCost")
             }
           }
@@ -426,7 +427,8 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
               val agedCost = origCost - costOfCachedBlock.cost.toLong
               metricTracker.memBlockIdToCompCostMap.put(cachedDescendantBlock, agedCost)
               agedDescendants.add(cachedDescendantBlock)
-              logInfo(s"[BLAZE] [Aging] victim ${costOfCachedBlock.blockId} ${costOfCachedBlock.cost}" +
+              logInfo(s"[BLAZE] [Aging] victim ${costOfCachedBlock.blockId}" +
+                s" ${costOfCachedBlock.cost}" +
                 s"descendant $cachedDescendant $origCost aged to $agedCost")
             }
           }

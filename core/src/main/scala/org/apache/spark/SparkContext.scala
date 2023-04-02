@@ -1927,7 +1927,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   private[spark] def persistRDD(rdd: RDD[_]): Unit = {
 //    persistentRdds(rdd.id) = rdd
-    logInfo(s"Persisted RDD ${rdd.id}")
+    logInfo(s"[BLAZE] Persisted RDD ${rdd.id}")
   }
 
   /**
@@ -1937,7 +1937,7 @@ class SparkContext(config: SparkConf) extends Logging {
     env.blockManager.master.removeRdd(rddId, blocking)
 //    persistentRdds.remove(rddId)
     listenerBus.post(SparkListenerUnpersistRDD(rddId))
-    logInfo(s"Unpersisted RDD $rddId")
+    logInfo(s"[BLAZE] Unpersisted RDD $rddId")
   }
 
   /**
@@ -2164,7 +2164,7 @@ class SparkContext(config: SparkConf) extends Logging {
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
     val jct = System.currentTimeMillis() - startJCT
-    logInfo(s"\n\n$costFunc JCT: $jct ms\n\n")
+    logInfo(s"\n\n[BLAZE] $costFunc JCT: $jct ms\n\n")
   }
 
 

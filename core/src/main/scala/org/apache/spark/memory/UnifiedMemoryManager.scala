@@ -57,7 +57,7 @@ private[spark] class UnifiedMemoryManager(
     onHeapStorageRegionSize,
     maxHeapMemory - onHeapStorageRegionSize) {
 
-  logInfo("UnifiedMemoryManager is created")
+  logInfo("[BLAZE] UnifiedMemoryManager is created")
 
   private def assertInvariants(): Unit = {
     assert(onHeapExecutionMemoryPool.poolSize + onHeapStorageMemoryPool.poolSize == maxHeapMemory)
@@ -163,7 +163,7 @@ private[spark] class UnifiedMemoryManager(
         maxOffHeapStorageMemory)
     }
 
-    logInfo(s"Storage Pool: estimatedSize: $bytesToStore Free: ${storagePool.memoryFree}")
+    logInfo(s"[BLAZE] Storage Pool: estimatedSize: $bytesToStore Free: ${storagePool.memoryFree}")
     if (bytesToStore > storagePool.memoryFree) {
       // There is not enough free memory in the storage pool, so try to borrow free memory from
       // the execution pool.
@@ -198,8 +198,8 @@ private[spark] class UnifiedMemoryManager(
     }
     if (numBytes > maxMemory) {
       // Fail fast if the block simply won't fit
-      logInfo(s"Will not store $blockId as the required space ($numBytes bytes) exceeds our " +
-        s"memory limit ($maxMemory bytes)")
+      logInfo(s"[BLAZE] Will not store $blockId as the required space ($numBytes bytes) " +
+        s"exceeds our memory limit ($maxMemory bytes)")
       return false
     }
     if (numBytes > storagePool.memoryFree) {
