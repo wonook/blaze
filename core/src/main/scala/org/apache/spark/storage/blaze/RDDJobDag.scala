@@ -20,9 +20,9 @@ package org.apache.spark.storage.blaze
 import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.storage.blaze.RDDJobDag.{buildCachedReverseDependency}
+import org.apache.spark.storage.blaze.RDDJobDag.buildCachedReverseDependency
 import org.apache.spark.storage.{BlockId, RDDBlockId}
-import org.eclipse.jetty.util.ajax.JSON
+import org.json4s.jackson.JsonMethods
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
@@ -1017,15 +1017,18 @@ object RDDJobDag extends Logging {
           val l = line.stripLineEnd
 
           // Parse history log file, which is in json format
-          val jsonMap = JSON.parse(l).asInstanceOf[java.util.Map[String, Any]].asScala
+          implicit val formats = org.json4s.DefaultFormats
+          val jsonMap = JsonMethods.parse(l).extract[Map[String, Any]]
 
           if (jsonMap("Event").equals("SparkListenerJobStart")) {
-            profiledJobIdSoFar = jsonMap("Job ID").asInstanceOf[Long].toInt
+            profiledJobIdSoFar = jsonMap("Job ID").asInstanceOf[BigInt].toInt
+            print(s"Profiled Job ID: $profiledJobIdSoFar")
             profiledJobs += 1
           } else if (jsonMap("Event").equals("SparkListenerStageCompleted")) {
-            val stageInfo = jsonMap("Stage Info").asInstanceOf[java.util.Map[Any, Any]].asScala
-            val rdds = stageInfo("RDD Info").asInstanceOf[Array[Object]].toIterator
-            val stageId = stageInfo("Stage ID").asInstanceOf[Long].toInt
+            val stageInfo = jsonMap("Stage Info")
+              .asInstanceOf[scala.collection.immutable.HashMap[Any, Any]]
+            val rdds = stageInfo("RDD Info").asInstanceOf[List[Any]].toIterator
+            val stageId = stageInfo("Stage ID").asInstanceOf[BigInt].toInt
             profiledStages += stageId
 
             // for LRC and MRD
@@ -1041,12 +1044,12 @@ object RDDJobDag extends Logging {
 
             // add vertices
             for (r <- rdds) {
-              val rdd = r.asInstanceOf[java.util.Map[Any, Any]].asScala
+              val rdd = r.asInstanceOf[scala.collection.immutable.HashMap[Any, Any]]
 
-              val rddId = rdd("RDD ID").asInstanceOf[Long].toInt
+              val rddId = rdd("RDD ID").asInstanceOf[BigInt].toInt
               val name = rdd("Name").asInstanceOf[String]
               val callSite = rdd("Callsite").asInstanceOf[String]
-              val parentIds = rdd("Parent IDs").asInstanceOf[Array[Object]].toIterator
+              val parentIds = rdd("Parent IDs").asInstanceOf[List[Any]].toIterator
               var rddNode = new RDDNode(rddId, name.equals("ShuffledRDD"), callSite, name)
 
               if (rddIdToRddNodeMap.contains(rddId)) {
@@ -1061,7 +1064,7 @@ object RDDJobDag extends Logging {
 
               for (parentId <- parentIds) {
                 // Update RDDJobDag dependency
-                val parentRDDId = parentId.asInstanceOf[Long].toInt
+                val parentRDDId = parentId.asInstanceOf[BigInt].toInt
                 if (!dependency.contains(parentRDDId)) {
                   dependency(parentRDDId) = new mutable.HashSet()
                 }
