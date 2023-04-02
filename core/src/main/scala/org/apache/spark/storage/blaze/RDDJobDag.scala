@@ -144,13 +144,13 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
       stageIdToReusedRDDsAndHighestUtilRDD.put(stageId, (reusedRDDsInStage, highestUtilReusedRDDs))
 
       /*
-      logInfo(s"[initLazyAutoCaching] In stage $stageId: " +
+      logInfo(s"[BLAZE] [initLazyAutoCaching] In stage $stageId: " +
         s"stageWideReverseDep.keySet ${stageWideReverseDep.keySet} " +
         s"reusedRDDs $reusedRDDs " +
         s"reusedRDDsInStage $reusedRDDsInStage " +
         s"highestUtilReusedRDDs $highestUtilReusedRDDs")
       */
-      logInfo(s"[initLazyAutoCaching] stage $stageId " +
+      logInfo(s"[BLAZE] [initLazyAutoCaching] stage $stageId " +
         s"highestUtilReusedRDDs $highestUtilReusedRDDs")
     }
 
@@ -177,7 +177,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
     visited.add(rddId)
 
     if (reusedRDDs.contains(rddId)) {
-      logInfo(s"[dfsForLazyAutoCaching] stage $stageId RDD$rddId is reused: stopping DFS " +
+      logInfo(s"[BLAZE] [dfsForLazyAutoCaching] stage $stageId RDD$rddId is reused: stopping DFS " +
       s"visited before returning $visited")
       return visited
     }
@@ -188,11 +188,11 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
         // Proceed to DFS until we add all reused parents
         if (reusedRDDs.contains(parentRDDId)) {
           visited.add(parentRDDId)
-          logInfo(s"[dfsForLazyAutoCaching] " +
+          logInfo(s"[BLAZE] [dfsForLazyAutoCaching] " +
             s"stage $stageId RDD$rddId's parent RDD$parentRDDId is reused: stopping DFS")
           // don't return here - we need info of all parents
         } else {
-          logInfo(s"[dfsForLazyAutoCaching] " +
+          logInfo(s"[BLAZE] [dfsForLazyAutoCaching] " +
             s"stage $stageId RDD$rddId's parent RDD$parentRDDId is not reused")
           dfsStageWideReuse(parentRDDId, visited, stageId, stageWideReverseDep)
             .foreach(visitedRDDId => visited.add(visitedRDDId))
@@ -215,7 +215,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
     val retBlocksVisited = new StringBuilder
     totalVisited.map(visitedBlockId => s"$visitedBlockId ").foreach(s => retBlocksVisited.append(s))
 
-    logInfo(s"[CheckHidden] $blockId: isHidden=$isHidden in stage(s) $currentStages " +
+    logInfo(s"[BLAZE] [CheckHidden] $blockId: isHidden=$isHidden in stage(s) $currentStages " +
     s"cached: ${cachedInMem.size} ${retBlocksInMem.toString()} " +
     s"persisted: ${cachedInDisk.size} ${retBlocksInDisk.toString()} " +
     s"total visited: ${totalVisited.size} ${retBlocksVisited.toString()}")
@@ -371,13 +371,13 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
     val isInDisk = metricTracker.diskBlockIdToMetadataMap.containsKey(blockId)
 
     if (isInMem) {
-      logInfo(s"[dfsGetLiveness] (targetBlockId $targetBlockId) stage $stageId " +
+      logInfo(s"[BLAZE] [dfsGetLiveness] (targetBlockId $targetBlockId) stage $stageId " +
         s"$blockId is materialized in memory: " +
         s"stopping DFS for this path")
       inMem.add(blockId)
       return (visited, inMem, inDisk)
     } else if (isInDisk) {
-      logInfo(s"[dfsGetLiveness] (targetBlockId $targetBlockId) stage $stageId " +
+      logInfo(s"[BLAZE] [dfsGetLiveness] (targetBlockId $targetBlockId) stage $stageId " +
         s"$blockId is materialized in disk: " +
         s"stopping DFS for this path")
       inDisk.add(blockId)
@@ -398,12 +398,12 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
         val isInDisk = metricTracker.diskBlockIdToMetadataMap.containsKey(childBlockId)
 
         if (isInMem) {
-          logInfo(s"[dfsGetLiveness] (targetBlockId $targetBlockId) stage $stageId " +
+          logInfo(s"[BLAZE] [dfsGetLiveness] (targetBlockId $targetBlockId) stage $stageId " +
             s"$blockId's child $childBlockId is materialized in memory: " +
             s"stopping DFS for this path")
           inMem.add(childBlockId)
         } else if (isInDisk) {
-          logInfo(s"[dfsGetLiveness] (targetBlockId $targetBlockId) stage $stageId " +
+          logInfo(s"[BLAZE] [dfsGetLiveness] (targetBlockId $targetBlockId) stage $stageId " +
             s"$blockId's child $childBlockId is materialized in disk: " +
             s"stopping DFS for this path")
           inDisk.add(childBlockId)
@@ -486,7 +486,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
           }
         })
 
-        logInfo(s"[Job-Wide DAG Construction] Updating Dependency:\t" +
+        logInfo(s"[BLAZE] [Job-Wide DAG Construction] Updating Dependency:\t" +
           s"RDD$parentRDDId child RDDs ${dependency(parentRDDId)}")
 
 
@@ -499,7 +499,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
         val parentRDDNode = rddIdToRddNodeMap(parentRDDId)
         parentRDDNode.addReferencedJob(jobId)
         parentRDDNode.addReferencedStage(stageId)
-        logInfo(s"[Job-Wide DAG Construction] Updating RDDNode:\t" +
+        logInfo(s"[BLAZE] [Job-Wide DAG Construction] Updating RDDNode:\t" +
           s"RDD$parentRDDId refJob $jobId refStage $stageId")
 
         // add children
@@ -512,7 +512,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
           val childRDDNode = rddIdToRddNodeMap(childRDDId)
           childRDDNode.addReferencedJob(jobId)
           childRDDNode.addReferencedStage(stageId)
-          logInfo(s"[Job-Wide DAG Construction] Updating RDDNode:\t" +
+          logInfo(s"[BLAZE] [Job-Wide DAG Construction] Updating RDDNode:\t" +
             s"RDD$childRDDId refJob $jobId refStage $stageId")
         })
       })
@@ -545,7 +545,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
           }
         })
 
-        logInfo(s"[ReuseBasedAutoCaching] RDDs registered as reused RDD $reusedRDDs")
+        logInfo(s"[BLAZE] [ReuseBasedAutoCaching] RDDs registered as reused RDD $reusedRDDs")
       }
 
       // Update reverse dependency
@@ -604,7 +604,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
 
     val sb = new StringBuilder
     liveCachedAncestors.map(ancestorRDDId => s"$ancestorRDDId ").foreach(s => sb.append(s))
-    logInfo(s"[getLiveCachedAncestors] Stage $currentStages " +
+    logInfo(s"[BLAZE] [getLiveCachedAncestors] Stage $currentStages " +
       s"$blockId's live cached or persisted ancestors ${sb.toString()}")
 
     liveCachedAncestors
@@ -628,7 +628,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
 
     val sb = new StringBuilder
     cachedAncestors.map(ancestorRDDId => s"$ancestorRDDId ").foreach(s => sb.append(s))
-    logInfo(s"[getCachedAncestorRDDs] Stage $currentStages " +
+    logInfo(s"[BLAZE] [getCachedAncestorRDDs] Stage $currentStages " +
       s"$blockId's marked as cached ancestor RDDs ${sb.toString()}")
 
     cachedAncestors
@@ -672,7 +672,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
 
     val sb = new StringBuilder
     hiddenCachedAncestors.map(ancestorRDDId => s"$ancestorRDDId ").foreach(s => sb.append(s))
-    logInfo(s"[getCachedAncestorsHiddenBy] Stage $currentStages " +
+    logInfo(s"[BLAZE] [getCachedAncestorsHiddenBy] Stage $currentStages " +
       s"cache insertion of $blockId will hide ${sb.toString()} which are marked as cached")
 
     hiddenCachedAncestors
@@ -743,7 +743,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
 
               // Proceed to DFS until we find a parent who is materialized and live
               if (stoppingCond(parentBlockId, origBlockId)) {
-                logInfo(s"[dfsCompCost] for $origBlockId: stopping DFS "
+                logInfo(s"[BLAZE] [dfsCompCost] for $origBlockId: stopping DFS "
                   + s"at $parentBlockId which is cached or persisted")
               } else {
                 waitingForVisit.push(parentBlockId)
@@ -773,7 +773,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
     val (partialLineage, times) = dfsCalculateCompCost(blockId)
 
     val computationCost = times.sum
-    logInfo(s"[CompCost] $blockId calculated: " +
+    logInfo(s"[BLAZE] [CompCost] $blockId calculated: " +
       s"lineage ${partialLineage.sortBy(_.split("_")(1).toInt)} time sum $computationCost")
 
     computationCost
@@ -864,7 +864,7 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
     })
 
     val refCnt = notYetComputedChildBlocks.size
-    logInfo(s"$blockId refcnt $refCnt " +
+    logInfo(s"[BLAZE] $blockId refcnt $refCnt " +
       s"not yet computed child blocks " +
       s"from stage $currentStageId until stage $lastStageId: " +
       s"$notYetComputedChildBlocks")
@@ -904,11 +904,11 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
     var refDist = -1.0
     val futureRefStages = rddNode.getReferencedStages().diff(pastStages)
     if (futureRefStages.isEmpty) {
-      logInfo(s"refdist: $blockId currentStage $currentStage nearestRefStage None "
+      logInfo(s"[BLAZE] refdist: $blockId currentStage $currentStage nearestRefStage None "
         + s"stageDist -1.0")
       return -1.0
     } else if (futureRefStages.contains(currentStage)) {
-      logInfo(s"refdist: $blockId currentStage $currentStage nearestRefStage $currentStage "
+      logInfo(s"[BLAZE] refdist: $blockId currentStage $currentStage nearestRefStage $currentStage "
         + s"stageDist 0.0")
       return 0.0
     }
@@ -936,7 +936,8 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
       }
     }
 
-    logInfo(s"refdist: $blockId currentStage $currentStage nearestRefStage $nearestRefStage "
+    logInfo(s"[BLAZE] refdist: $blockId currentStage $currentStage " +
+      s"nearestRefStage $nearestRefStage "
       + s"stagesBetween $stagesLeft stageDist ${stagesLeft.size}")
 
     if (stagesLeft.nonEmpty) {
@@ -1059,7 +1060,7 @@ object RDDJobDag extends Logging {
               rddNode.addReferencedStage(stageId)
               rddIdToRddNodeMap.put(rddId, rddNode)
 
-              logInfo(s"[App-Wide DAG Construction] Updating RDDNode:\t" +
+              logInfo(s"[BLAZE] [App-Wide DAG Construction] Updating RDDNode:\t" +
                 s"RDD${rddNode.rddId} ${rddNode.toString}")
 
               for (parentId <- parentIds) {
@@ -1069,8 +1070,8 @@ object RDDJobDag extends Logging {
                   dependency(parentRDDId) = new mutable.HashSet()
                 }
                 dependency(parentRDDId).add(rddId)
-                logInfo(s"[App-Wide DAG Construction] Updating dependency(parent:child):\t" +
-                  s"RDD$parentRDDId:RDD$rddId")
+                logInfo(s"[BLAZE] [App-Wide DAG Construction] Updating " +
+                  s"dependency(parent:child):\tRDD$parentRDDId:RDD$rddId")
               }
             }
           }
@@ -1087,7 +1088,7 @@ object RDDJobDag extends Logging {
       }
 
       profiledJobIdSoFar -= 1
-      logInfo(s"[App-Wide DAG Construction] " +
+      logInfo(s"[BLAZE] [App-Wide DAG Construction] " +
         s"lastProfiledJobId $profiledJobIdSoFar lastProfiledStageId ${profiledStages.max} " +
         s"profiledStages ${profiledStages.sorted}")
       val rddJobDag = new RDDJobDag(dependency, buildReverseDependency(dependency),

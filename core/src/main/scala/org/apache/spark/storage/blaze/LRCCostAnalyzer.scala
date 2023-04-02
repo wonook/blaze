@@ -30,7 +30,9 @@ private[spark] class LRCCostAnalyzer(costType: String,
       // deprioritize dead block
       new Cost(blockId, -1.0)
     } else {
-      new Cost(blockId, rddJobDag.notYetComputedChildBlocks(blockId))
+      val cost = rddJobDag.notYetComputedChildBlocks(blockId)
+      logInfo(s"[BLAZE] [getCostOfCachedBlock] LRC: Executor $executorId $blockId get cost $cost")
+      new Cost(blockId, cost)
     }
   }
 }

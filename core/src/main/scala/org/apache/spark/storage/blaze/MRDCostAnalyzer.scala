@@ -30,12 +30,16 @@ private[spark] class MRDCostAnalyzer(costType: String,
 
     if (rddJobDag.isHidden(blockId)) {
       // deprioritize dead block
+      logInfo(s"[BLAZE] [getCostOfCachedBlock] MRD: Executor $executorId $blockId get cost -1.0")
       new Cost(blockId, -1.0)
     } else if (refDist == 0) {
       // block with the smallest refdist = largest cost
+      logInfo(s"[BLAZE] [getCostOfCachedBlock] MRD: Executor $executorId $blockId get cost 100")
       new Cost(blockId, 100)
     } else {
       // block with the largest refdist = smallest cost (0 ~ 1)
+      logInfo(s"[BLAZE] [getCostOfCachedBlock] MRD: Executor $executorId $blockId get cost" +
+        s" ${1/refDist}")
       new Cost(blockId, 1/refDist)
     }
   }

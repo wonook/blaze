@@ -27,6 +27,8 @@ private[spark] class LRUCostAnalyzer(costType: String,
 
   // lowest cost (= earliest last access time ) block is evicted
   override def getCostOfCachedBlock(executorId: String, blockId: BlockId): Cost = {
-    new Cost(blockId, rddJobDag.getRecency(blockId))
+    val cost = rddJobDag.getRecency(blockId)
+    logInfo(s"[BLAZE] [getCostOfCachedBlock] LRU: Executor $executorId $blockId get cost $cost")
+    new Cost(blockId, cost)
   }
 }

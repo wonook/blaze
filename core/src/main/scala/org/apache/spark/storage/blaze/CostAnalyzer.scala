@@ -81,7 +81,7 @@ private[spark] abstract class CostAnalyzer(val costType: String,
       .map(entry => s"Executor ${entry._1}: ${costListToString(entry._2)}\n")
       .foreach(s => sb.append(s))
 
-    logInfo(s"------------- Cost map (BlockId:Priority:CompCost) -----------\n" +
+    logInfo(s"[BLAZE] ------------- Cost map (BlockId:Priority:CompCost) -----------\n" +
       s"${sb.toString()}\n" +
       s"------------- Update time (ms) $updateTime ----------------\n")
   }

@@ -53,7 +53,7 @@ private[spark] class GDCostAnalyzer(costType: String,
     }
 
     val cost = metricTracker.memBlockIdToCompCostMap.get(blockId)
-    logInfo(s"[getCostOfCachedBlock] Executor $executorId $blockId get cost $cost")
+    logInfo(s"[BLAZE] [getCostOfCachedBlock] GD: Executor $executorId $blockId get cost $cost")
 
     new Cost(blockId, cost.toDouble)
   }

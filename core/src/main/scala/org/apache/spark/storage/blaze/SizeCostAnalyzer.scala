@@ -30,7 +30,8 @@ private[spark] class SizeCostAnalyzer(costType: String,
     // = block with largest size
     // for blocks with unknown size, we return -1
     val size = metricTracker.memBlockIdToSizeMap.getOrDefault(blockId, -1L)
-
+    logInfo(s"[BLAZE] [getCostOfCachedBlock] Size: Executor $executorId $blockId get " +
+      s"cost ${1/size}")
     new Cost(blockId, 1/size)
   }
 }

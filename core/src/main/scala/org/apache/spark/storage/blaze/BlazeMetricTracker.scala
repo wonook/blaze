@@ -126,7 +126,7 @@ private[spark] class BlazeMetricTracker extends Logging {
 
     if (diskBlockIdToMetadataMap.containsKey(blockId)
     && executorIdToDiskBlockIdsMap.containsKey(executorId)) {
-      logWarning("Block metadata already registered for this executor! "
+      logWarning("[BLAZE] Block metadata already registered for this executor! "
       + "Maybe re-spilling an already spilled block?")
     }
 
@@ -145,7 +145,7 @@ private[spark] class BlazeMetricTracker extends Logging {
   }
 
   def taskStarted(taskId: String): Unit = {
-    logInfo(s"Handling task ${taskId} started")
+    logInfo(s"[BLAZE] Handling task ${taskId} started")
     taskStartTime.synchronized {
       taskStartTime.putIfAbsent(taskId, System.currentTimeMillis())
     }
@@ -153,6 +153,6 @@ private[spark] class BlazeMetricTracker extends Logging {
 
   def taskFinished(taskId: String): Unit = synchronized {
     val tct = System.currentTimeMillis() - taskStartTime.get(taskId).get
-    logInfo(s"Handling task $taskId finished $tct")
+    logInfo(s"[BLAZE] Handling task $taskId finished $tct")
   }
 }

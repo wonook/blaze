@@ -25,6 +25,7 @@ private[spark] class NullCostAnalyzer(costType: String,
   extends CostAnalyzer(costType, rddJobDag, metricTracker) with Logging {
 
   override def getCostOfCachedBlock(executorId: String, blockId: BlockId): Cost = {
+    logInfo(s"[BLAZE] [getCostOfCachedBlock] Null: Executor $executorId $blockId get cost 0.0")
     new Cost(blockId, 0.0)
   }
 }

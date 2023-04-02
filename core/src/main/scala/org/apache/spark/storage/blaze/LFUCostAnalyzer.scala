@@ -27,6 +27,8 @@ private[spark] class LFUCostAnalyzer(costType: String,
 
   // lowest cost (= smallest number of past accesses) block is evicted
   override def getCostOfCachedBlock(executorId: String, blockId: BlockId): Cost = {
-    new Cost(blockId, rddJobDag.getAccessCnt(blockId))
+    val cost = rddJobDag.getAccessCnt(blockId)
+    logInfo(s"[BLAZE] [getCostOfCachedBlock] LFU: Executor $executorId $blockId get cost $cost")
+    new Cost(blockId, cost)
   }
 }

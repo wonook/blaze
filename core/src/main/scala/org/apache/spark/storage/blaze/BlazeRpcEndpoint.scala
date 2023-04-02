@@ -39,7 +39,7 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
                                       val rddJobDag: Option[RDDJobDag])
   extends AbstractBlazeRpcEndpoint {
 
-  logInfo(s"BlazeRpcEndpoint created")
+  logInfo(s"[BLAZE] BlazeRpcEndpoint created")
 
   blockManagerMasterEndpoint.setBlazeRpcEndpoint(this)
 
@@ -72,7 +72,7 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
 
   // Public methods
   def removeExecutor(executorId: String): Unit = {
-    logInfo(s"Remove executor $executorId: " +
+    logInfo(s"[BLAZE] Remove executor $executorId: " +
       s"Currently does nothing - implement locks for FT")
 
     /*
@@ -132,18 +132,18 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
   }
 
   def taskFinished(taskId: String): Unit = {
-    logInfo(s"TaskFinished $taskId")
+    logInfo(s"[BLAZE] TaskFinished $taskId")
     metricTracker.taskFinished(taskId)
   }
 
   def taskStarted(taskId: String): Unit = {
-    logInfo(s"TaskStarted $taskId")
+    logInfo(s"[BLAZE] TaskStarted $taskId")
     metricTracker.taskStarted(taskId)
   }
 
   def reuseBasedAutoCaching(rddId: Int): Boolean = {
     if (rddJobDag.get.reusedRDDs.contains(rddId)) {
-      logInfo(s"[ReuseBasedAutoCaching] WILL cache RDD$rddId which is reused")
+      logInfo(s"[BLAZE] [ReuseBasedAutoCaching] WILL cache RDD$rddId which is reused")
       return true
     }
 
@@ -161,11 +161,11 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
       val (reusedRDDsInStage, highestUtilReusedRDDs) = entry._2
       if (rddJobDag.get.currentStages.contains(stageId)) {
         if (highestUtilReusedRDDs.contains(rddId)) {
-          logInfo(s"[LazyAutoCaching] WILL cache RDD$rddId in stage $stageId " +
+          logInfo(s"[BLAZE] [LazyAutoCaching] WILL cache RDD$rddId in stage $stageId " +
             s"dep $reusedRDDsInStage highest util RDDs $highestUtilReusedRDDs")
           return true
         } else if (reusedRDDsInStage.contains(rddId)) {
-          // logInfo(s"[LazyAutoCaching] WON'T cache RDD$rddId. dep $reusedRDDsInStage " +
+          // logInfo(s"[BLAZE] [LazyAutoCaching] WON'T cache RDD$rddId. dep $reusedRDDsInStage " +
           //  s"highest util RDDs $highestUtilReusedRDDs")
           return false
         }
@@ -173,7 +173,7 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
     })
 
     if (rddJobDag.get.reusedRDDs.contains(rddId)) {
-      logInfo(s"[LazyAutoCaching] RDD$rddId is reused " +
+      logInfo(s"[BLAZE] [LazyAutoCaching] RDD$rddId is reused " +
         s"but not included in current stage(s)")
     }
 
@@ -205,7 +205,7 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
   def stageSubmitted(stageId: Int, jobId: Int,
                      rdd: String, partitions: Array[Partition], numPartitions: Int): Unit =
     synchronized {
-      logInfo(s"Stage submitted: $stageId, jobId: $jobId " +
+      logInfo(s"[BLAZE] Stage submitted: $stageId, jobId: $jobId " +
         s"stageId:jobId map so far: ${metricTracker.jobIdToStageIdsMap}")
 
       metricTracker.stageIdToSubmissionTimeMap.put(stageId, System.currentTimeMillis())
@@ -294,14 +294,14 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
     val latestAccessTime = System.currentTimeMillis()
     if (!metricTracker.blockIdToTimeStampMap.containsKey(blockId)) {
       metricTracker.blockIdToTimeStampMap.put(blockId, latestAccessTime)
-      logInfo(s"init recency for $blockId: $latestAccessTime upon caching")
+      logInfo(s"[BLAZE] init recency for $blockId: $latestAccessTime upon caching")
     }
 
     val currentJobId = rddJobDag.get.currentJobId
 
     // Init past frequency blocks that are created for the first time in this job
     if (!metricTracker.blockIdToAccessCntMap.containsKey(blockId)) {
-      logInfo(s"init past frequency for $blockId: 0 upon caching. " +
+      logInfo(s"[BLAZE] init past frequency for $blockId: 0 upon caching. " +
         s"first created in job $currentJobId")
       metricTracker.blockIdToAccessCntMap.put(blockId, 0)
     }
@@ -360,7 +360,7 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
       costFunction.contains("LRC") || costFunction.contains("MRD")) {
       if (incomingCost.cost >= 0.0) {
         if (existingCost.cost <= incomingCost.cost) {
-          logInfo(s"[VictimSelection] $costFunction: " +
+          logInfo(s"[BLAZE] [VictimSelection] $costFunction: " +
             s"existing ${existingCost.blockId} ${existingCost.cost} < " +
             s"incoming ${incomingCost.blockId} ${incomingCost.cost}")
           return true
@@ -402,7 +402,7 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
               val agedCost = origCost - costOfCachedBlock.cost.toLong
               metricTracker.memBlockIdToCompCostMap.put(cachedAncestorBlock, agedCost)
               agedAncestors.add(cachedAncestorBlock)
-              logInfo(s"[Aging] victim ${costOfCachedBlock.blockId} ${costOfCachedBlock.cost}" +
+              logInfo(s"[BLAZE] [Aging] victim ${costOfCachedBlock.blockId} ${costOfCachedBlock.cost}" +
                 s"ancestor $cachedAncestorBlock $origCost aged to $agedCost")
             }
           }
@@ -426,7 +426,7 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
               val agedCost = origCost - costOfCachedBlock.cost.toLong
               metricTracker.memBlockIdToCompCostMap.put(cachedDescendantBlock, agedCost)
               agedDescendants.add(cachedDescendantBlock)
-              logInfo(s"[Aging] victim ${costOfCachedBlock.blockId} ${costOfCachedBlock.cost}" +
+              logInfo(s"[BLAZE] [Aging] victim ${costOfCachedBlock.blockId} ${costOfCachedBlock.cost}" +
                 s"descendant $cachedDescendant $origCost aged to $agedCost")
             }
           }
@@ -499,7 +499,7 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
             }
 
             if (sizeSum >= numBytesToFree) {
-              logInfo(s"[VictimSelection] $costFunction: " +
+              logInfo(s"[BLAZE] [VictimSelection] $costFunction: " +
                 s"SizeSum: $sizeSum numBytesToFree: $numBytesToFree " +
                 s"incomingBlock: $incomingBlockId selectedVictims $selectedVictims")
               return selectedVictims.toList
@@ -509,7 +509,7 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
       }
     }
 
-    logWarning(s"[VictimSelection] $costFunction: " +
+    logWarning(s"[BLAZE] [VictimSelection] $costFunction: " +
       s"costList is empty: nothing to evict for incomingBlock $incomingBlockId")
     List.empty
   }
@@ -687,14 +687,14 @@ private[spark] class BlazeRpcEndpoint(override val rpcEnv: RpcEnv,
         assert(metricTracker.blockIdToAccessCntMap.containsKey(blockId))
         val newAccessCnt = metricTracker.blockIdToAccessCntMap.get(blockId) + 1
         metricTracker.blockIdToAccessCntMap.put(blockId, newAccessCnt)
-        logInfo(s"Hit: $blockId past frequency $newAccessCnt " +
+        logInfo(s"[BLAZE] Hit: $blockId past frequency $newAccessCnt " +
           s"(job $currentJobId stage ${rddJobDag.get.currentStages})")
 
         // update recency
         assert(metricTracker.blockIdToTimeStampMap.containsKey(blockId))
         val latestAccessTime = System.currentTimeMillis()
         metricTracker.blockIdToTimeStampMap.put(blockId, latestAccessTime)
-        logInfo(s"Hit: $blockId recency $latestAccessTime " +
+        logInfo(s"[BLAZE] Hit: $blockId recency $latestAccessTime " +
           s"(job $currentJobId stage ${rddJobDag.get.currentStages})")
       }
       BlazeLogger.cacheHit(blockId, executorId, fromRemote, onDisk, rtime)
