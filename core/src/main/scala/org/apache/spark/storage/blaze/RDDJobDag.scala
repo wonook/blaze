@@ -525,11 +525,13 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
           val refStages = rddNode.getReferencedStages()
           var stagesWithChild = new mutable.HashSet[Int]()
           // that have children in different stages
-          dependency(rddId).foreach(childRDDId => {
-            val childRDDNode = rddIdToRddNodeMap(childRDDId)
-            val childRefStages = childRDDNode.getReferencedStages()
-            stagesWithChild = stagesWithChild.union(refStages.intersect(childRefStages))
-          })
+          if (dependency.contains(rddId)) {
+            dependency(rddId).foreach(childRDDId => {
+              val childRDDNode = rddIdToRddNodeMap(childRDDId)
+              val childRefStages = childRDDNode.getReferencedStages()
+              stagesWithChild = stagesWithChild.union(refStages.intersect(childRefStages))
+            })
+          }
 
           if (stagesWithChild.size > 1) {
             reusedRDDs.add(rddId)
