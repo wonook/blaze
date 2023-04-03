@@ -822,10 +822,12 @@ class RDDJobDag(val dependency: mutable.Map[Int, mutable.Set[Int]],
     }
 
     val notYetComputedChildBlocks = new mutable.HashSet[BlockId]()
-    val intraJobStages = jobIdToStageIdsMap(currentJobId)
     var lastStageId = lastProfiledStageId
-    if (lastProfiledStageId < intraJobStages.max) {
-      lastStageId = intraJobStages.max
+    if (jobIdToStageIdsMap.contains(currentJobId)) {
+      val intraJobStages = jobIdToStageIdsMap(currentJobId)
+      if (lastProfiledStageId < intraJobStages.max) {
+        lastStageId = intraJobStages.max
+      }
     }
     val currentStageId = getCurrentStage()
 

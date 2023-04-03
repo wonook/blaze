@@ -1325,6 +1325,7 @@ private[spark] class DAGScheduler(
       case Some(dag) =>
         // called once when a new job is submitted
         dag.currentJobId = jobId
+        logInfo(s"job $jobId is submitted, currentJobId is set to $jobId")
         // called for each new stage
         val sortedStages = stages.toList.sortBy(s => s.id)
 
