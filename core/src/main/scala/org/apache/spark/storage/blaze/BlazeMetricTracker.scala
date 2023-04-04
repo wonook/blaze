@@ -112,12 +112,16 @@ private[spark] class BlazeMetricTracker extends Logging {
       if (diskBlockIdToMetadataMap.containsKey(blockId)) {
         diskBlockIdToMetadataMap.remove(blockId)
       }
-      executorIdToDiskBlockIdsMap.get(executorId).remove(blockId)
+      if (executorIdToDiskBlockIdsMap.containsKey(executorId)) {
+        executorIdToDiskBlockIdsMap.get(executorId).remove(blockId)
+      }
     } else {
       if (memBlockIdToSizeMap.containsKey(blockId)) {
         memBlockIdToSizeMap.remove(blockId)
       }
-      executorIdToMemBlockIdsMap.get(executorId).remove(blockId)
+      if (executorIdToMemBlockIdsMap.containsKey(executorId)) {
+        executorIdToMemBlockIdsMap.get(executorId).remove(blockId)
+      }
     }
   }
 
