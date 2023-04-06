@@ -1960,7 +1960,7 @@ private[spark] class BlockManager(
       data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
     val st = System.currentTimeMillis()
 
-    logInfo(s"[BLAZE] Dropping block $blockId from memory in $executorId")
+    logInfo(s"[BLAZE] Dropping block $blockId from memory in executor $executorId")
     val info = blockInfoManager.assertBlockIsLockedForWriting(blockId)
     var blockIsUpdated = false
 //    val level = info.level
